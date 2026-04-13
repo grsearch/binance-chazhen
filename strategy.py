@@ -32,7 +32,7 @@ class StrategyConfig:
     min_gain_24h: float = 30.0       # 24h最低涨幅%
     min_volume_usdt: float = 500_000  # 最低成交额USDT
 
-    # 挂单参数（基于当根K线最低价向下）
+    # 挂单参数（基于当根K线收盘价向下）
     order_pct_1: float = 4.0          # 第1档 -4%
     order_pct_2: float = 6.0          # 第2档 -6%
     order_pct_3: float = 9.0          # 第3档 -9%
@@ -40,9 +40,12 @@ class StrategyConfig:
     order_ratio_2: float = 0.35       # 第2档仓位比例
     order_ratio_3: float = 0.25       # 第3档仓位比例
 
-    # 触发挂单条件
-    min_candle_drop_pct: float = 0.5  # K线最小跌幅%才挂单
-    cooldown_candles: int = 2         # 撤单后冷却K线数
+    # 触发挂单条件（放宽）
+    # 条件1：阴线（收 < 开）即可挂单，不再要求连续下跌或最小跌幅
+    # 条件2（高位保护）：收盘价 >= 当日最高价 × high_price_ratio
+    #   确保还处于高位区间，不在已深跌的底部继续接刀
+    high_price_ratio: float = 0.80    # 收盘价需 >= 当日最高价 × 80%
+    cooldown_candles: int = 2         # 出场后冷却K线数
 
     # 卖出参数
     stop_loss_pct: float = 3.0        # 止损% (相对成交均价)
@@ -122,38 +125,52 @@ class SpikeStrategy:
     # 挂单逻辑
     # ─────────────────────────────────────────
     def should_place_orders(self, candle: dict) -> bool:
-        """当根K线是否满足挂单条件"""
+        """
+        挂单触发条件（放宽版）：
+        1. 阴线：收盘价 < 开盘价
+        2. 高位保护：收盘价 >= 当日最高价 × high_price_ratio（默认80%）
+           防止在已深跌的位置继续接刀
+        去掉了：最小跌幅要求、连续下跌要求（这两个条件过于严格，导致漏单）
+        """
         open_p  = float(candle["open"])
         close_p = float(candle["close"])
+        # 条件1：必须是阴线
         if close_p >= open_p:
-            return False  # 阳线不挂
-        drop_pct = (open_p - close_p) / open_p * 100
-        if drop_pct < self.config.min_candle_drop_pct:
-            return False  # 跌幅不够
-        # 收盘价需低于上根收盘（连续下跌确认）
-        prev_close = float(candle.get("prev_close", close_p + 1))
-        return close_p < prev_close
+            return False
+        # 条件2：高位保护 —— 收盘价不能离当日最高价太远
+        # day_high 由外部传入（虚拟盘从ticker获取，回测从当日K线取最高）
+        # 若未传入则跳过此保护（兼容旧调用方式）
+        day_high = float(candle.get("day_high", 0))
+        if day_high > 0:
+            if close_p < day_high * self.config.high_price_ratio:
+                return False  # 已经跌太深，不接刀
+        return True
 
-    def calc_order_prices(self, low: float) -> list[tuple]:
-        """以K线最低价为基准计算三档挂单价"""
+    def calc_order_prices(self, close: float) -> list[tuple]:
+        """
+        以K线收盘价为基准计算三档挂单价（原来用最低价）。
+        改用收盘价的原因：
+        - 最低价可能本身已经是插针低点，再往下挂几乎不会成交
+        - 收盘价更贴近"当前市场共识价"，从这里往下的百分比更有意义
+        """
         cfg = self.config
         return [
-            (low * (1 - cfg.order_pct_1 / 100), cfg.order_ratio_1),
-            (low * (1 - cfg.order_pct_2 / 100), cfg.order_ratio_2),
-            (low * (1 - cfg.order_pct_3 / 100), cfg.order_ratio_3),
+            (close * (1 - cfg.order_pct_1 / 100), cfg.order_ratio_1),
+            (close * (1 - cfg.order_pct_2 / 100), cfg.order_ratio_2),
+            (close * (1 - cfg.order_pct_3 / 100), cfg.order_ratio_3),
         ]
 
-    def build_orders(self, symbol: str, low: float, ts: str) -> list[Order]:
+    def build_orders(self, symbol: str, close: float, ts: str) -> list[Order]:
         cfg = self.config
         total = cfg.position_size_usdt
         orders = []
-        for i, (price, ratio) in enumerate(self.calc_order_prices(low)):
+        for i, (price, ratio) in enumerate(self.calc_order_prices(close)):
             qty = (total * ratio) / price
             orders.append(Order(
                 id=f"{symbol}_{ts}_{i+1}",
                 symbol=symbol,
-                price=round(price, 6),
-                qty=round(qty, 4),
+                price=round(price, 8),
+                qty=round(qty, 6),
                 ratio=ratio,
             ))
         return orders
@@ -312,11 +329,16 @@ class SpikeStrategy:
             if (not state.current_trade
                     and state.cooldown_remaining == 0
                     and self.should_place_orders(candle)):
-                low = float(candle["low"])
-                new_orders = self.build_orders(symbol, low, ts)
+                close = float(candle["close"])
+                new_orders = self.build_orders(symbol, close, ts)
                 state.orders = new_orders
-                prices = [f"{o.price:.4f}" for o in new_orders]
-                events.append(f"挂单: {prices}")
+                pcts = [self.config.order_pct_1,
+                        self.config.order_pct_2,
+                        self.config.order_pct_3]
+                price_str = " | ".join(
+                    f"{o.price:.6f}(-{p}%)" for o, p in zip(new_orders, pcts)
+                )
+                events.append(f"挂单:基准收盘={close:.6f} → {price_str}")
 
             self._log(symbol, ts, candle, state, events)
             return self._summary(symbol, state, events)

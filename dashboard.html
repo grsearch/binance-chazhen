@@ -456,7 +456,7 @@ header {
     <div class="cfg-grid" style="margin-bottom:22px">
       <div class="field"><label>24H最低涨幅 (%)</label><input id="c-gain" value="30"></div>
       <div class="field"><label>最低成交量 (USDT)</label><input id="c-vol" value="500000"></div>
-      <div class="field"><label>K线最小跌幅 (%)</label><input id="c-drop" value="0.5"></div>
+      <div class="field"><label>高位保护 (当日最高价×%)</label><input id="c-hpr" value="80"></div>
     </div>
     <div class="card-title">挂单参数（基于K线最低价向下）</div>
     <div class="cfg-grid" style="margin-bottom:22px">
@@ -562,9 +562,9 @@ function savePS() {
 
 function defaultCfg() {
   return {
-    min_gain:    30,
-    min_vol:     500000,
-    min_drop:    0.5,
+    min_gain:         30,
+    min_vol:          500000,
+    high_price_ratio: 0.80,
     order_pct:   [4, 6, 9],
     order_ratio: [0.4, 0.35, 0.25],
     sl_pct:      3,
@@ -642,12 +642,14 @@ async function getTopGainers() {
 
 // 获取最新已收盘的1分钟K线（拉3根取倒数第2根）
 async function getClosedKline(symbol) {
-  const data = await apiFetch(
-    `/api/v3/klines?symbol=${symbol}&interval=1m&limit=3`
-  );
-  if (data.length < 2) return null;
-  const prev = data[data.length - 3] || data[0];
-  const k    = data[data.length - 2];   // 已完整收盘
+  // 同时拉K线和24h行情（获取当日最高价，用于高位保护判断）
+  const [kData, ticker] = await Promise.all([
+    apiFetch(`/api/v3/klines?symbol=${symbol}&interval=1m&limit=3`),
+    apiFetch(`/api/v3/ticker/24hr?symbol=${symbol}`),
+  ]);
+  if (kData.length < 2) return null;
+  const prev    = kData[kData.length - 3] || kData[0];
+  const k       = kData[kData.length - 2];  // 已完整收盘
   return {
     open:       parseFloat(k[1]),
     high:       parseFloat(k[2]),
@@ -655,6 +657,7 @@ async function getClosedKline(symbol) {
     close:      parseFloat(k[4]),
     volume:     parseFloat(k[5]),
     prev_close: parseFloat(prev[4]),
+    day_high:   parseFloat(ticker.highPrice || 0),  // 当日最高价
     close_time: new Date(k[6]).toLocaleTimeString('zh-CN', {hour12:false}),
   };
 }
@@ -664,13 +667,13 @@ async function getClosedKline(symbol) {
 // ═══════════════════════════════════════════════════
 function shouldPlaceOrders(c) {
   if (c.close >= c.open) return false;
-  if ((c.open - c.close) / c.open * 100 < PS.cfg.min_drop) return false;
-  return c.close < c.prev_close;
+  if (c.day_high > 0 && c.close < c.day_high * PS.cfg.high_price_ratio) return false;
+  return true;
 }
 
-function calcOrderPrices(low) {
+function calcOrderPrices(close) {
   return PS.cfg.order_pct.map((pct, i) => ({
-    price: low * (1 - pct / 100),
+    price: close * (1 - pct / 100),
     ratio: PS.cfg.order_ratio[i],
     pct,
   }));
@@ -760,13 +763,13 @@ function processCandle(symbol, c) {
 
   // 3. 评估挂新单
   if (!RT.openPos[symbol] && shouldPlaceOrders(c)) {
-    const slots = calcOrderPrices(c.low);
+    const slots = calcOrderPrices(c.close);
     RT.pending[symbol] = slots.map(s => ({
       price: s.price, qty: (cfg.size * s.ratio) / s.price,
       ratio: s.ratio, pct: s.pct, status: 'pending',
     }));
     addLog(symbol,
-      `挂单:低价=${fmtP(c.low)} → ${slots.map(s => fmtP(s.price)).join(' / ')}`,
+      `挂单:收盘=${fmtP(c.close)} → ${slots.map(s => fmtP(s.price)).join(' / ')}`,
       'order');
     renderOrderSlots();
   }
@@ -1143,7 +1146,10 @@ function runBtStrategy(symbol, candles, cfg) {
       continue;
     }
     if (cooldown > 0) { cooldown--; continue; }
-    if (c.close < c.open && (c.open-c.close)/c.open*100 >= cfg.min_drop && c.close < c.prev_close) {
+    // 挂单条件（放宽）：阴线 + 高位保护
+    const _dh = c.day_high || 0;
+    const _ok = c.close < c.open && (_dh === 0 || c.close >= _dh * (cfg.high_price_ratio||0.8));
+    if (_ok) {
       ords = cfg.order_pct.map((pct,i) => ({
         price: c.low*(1-pct/100),
         qty:   (cfg.size*cfg.order_ratio[i])/(c.low*(1-pct/100)),
@@ -1271,7 +1277,7 @@ function saveCfg() {
   PS.cfg = {
     min_gain:    parseFloat($('c-gain').value),
     min_vol:     parseFloat($('c-vol').value),
-    min_drop:    parseFloat($('c-drop').value),
+    high_price_ratio: parseFloat($('c-hpr').value) / 100,
     order_pct:   [$('c-p1'),$('c-p2'),$('c-p3')].map(e => parseFloat(e.value)),
     order_ratio: [$('c-r1'),$('c-r2'),$('c-r3')].map(e => parseFloat(e.value)),
     sl_pct:      parseFloat($('c-sl').value),
@@ -1289,7 +1295,7 @@ function saveCfg() {
 
 function resetCfg() {
   const d = defaultCfg();
-  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-drop',d.min_drop],
+  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-hpr',(d.high_price_ratio||0.8)*100],
    ['c-p1',d.order_pct[0]],['c-p2',d.order_pct[1]],['c-p3',d.order_pct[2]],
    ['c-r1',d.order_ratio[0]],['c-r2',d.order_ratio[1]],['c-r3',d.order_ratio[2]],
    ['c-sl',d.sl_pct],['c-tp',d.tp_pct],['c-hold',d.max_hold],
@@ -1301,7 +1307,7 @@ function resetCfg() {
 
 function applyStoredCfgToUI() {
   const d = PS.cfg;
-  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-drop',d.min_drop],
+  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-hpr',(d.high_price_ratio||0.8)*100],
    ['c-p1',d.order_pct[0]],['c-p2',d.order_pct[1]],['c-p3',d.order_pct[2]],
    ['c-r1',d.order_ratio[0]],['c-r2',d.order_ratio[1]],['c-r3',d.order_ratio[2]],
    ['c-sl',d.sl_pct],['c-tp',d.tp_pct],['c-hold',d.max_hold],
