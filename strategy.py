@@ -29,7 +29,7 @@ class TradeStatus(Enum):
 @dataclass
 class StrategyConfig:
     # 筛选条件
-    min_gain_24h: float = 50.0       # 24h最低涨幅%
+    min_gain_24h: float = 30.0       # 24h最低涨幅%
     min_volume_usdt: float = 500_000  # 最低成交额USDT
 
     # 挂单参数（基于当根K线最低价向下）

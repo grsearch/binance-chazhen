@@ -391,7 +391,7 @@ header {
       </div>
       <div class="field">
         <label>最低涨幅%</label>
-        <input id="bt-gain" value="50" style="width:80px">
+        <input id="bt-gain" value="30" style="width:80px">
       </div>
       <button class="btn btn-primary" onclick="runBacktest()" id="btnBt">▶ 开始回测</button>
     </div>
@@ -454,7 +454,7 @@ header {
   <div class="card" style="max-width:820px">
     <div class="card-title">筛选条件</div>
     <div class="cfg-grid" style="margin-bottom:22px">
-      <div class="field"><label>24H最低涨幅 (%)</label><input id="c-gain" value="50"></div>
+      <div class="field"><label>24H最低涨幅 (%)</label><input id="c-gain" value="30"></div>
       <div class="field"><label>最低成交量 (USDT)</label><input id="c-vol" value="500000"></div>
       <div class="field"><label>K线最小跌幅 (%)</label><input id="c-drop" value="0.5"></div>
     </div>
@@ -562,7 +562,7 @@ function savePS() {
 
 function defaultCfg() {
   return {
-    min_gain:    50,
+    min_gain:    30,
     min_vol:     500000,
     min_drop:    0.5,
     order_pct:   [4, 6, 9],
@@ -1158,7 +1158,7 @@ async function runBacktest() {
   btn.disabled = true; btn.textContent = '回测中...';
   const symStr = $('bt-syms').value.trim();
   const days   = parseInt($('bt-days').value);
-  const gain   = parseFloat($('bt-gain').value) || 50;
+  const gain   = parseFloat($('bt-gain').value) || 30;
   $('btProgress').style.display  = 'block';
   $('btMetrics').style.display   = 'none';
   $('btCharts').style.display    = 'none';
