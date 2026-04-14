@@ -357,7 +357,7 @@ class LiveEngine:
                 "ratio":        ratio,
                 "status":       "pending",
                 "binance_id":   None,
-                "client_id":    f"{symbol}_{candle['close_time']}_{i+1}",
+                "client_id":    f"{symbol}_{int(time.time()*1000)}_{i+1}",
             }
             if mode == "live" and self.client:
                 try:
