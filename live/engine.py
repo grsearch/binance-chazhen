@@ -53,16 +53,18 @@ class LiveEngine:
             wins    = [t for t in closed if t.get("pnl_pct", 0) > 0]
             wr      = round(len(wins)/len(closed)*100, 1) if closed else 0
             return {
-                "running":    self.state["running"],
-                "mode":       self.cfg.get("mode", "paper"),
-                "symbols":    self.state["symbols"],
-                "positions":  self.state["positions"],
-                "orders":     self.state["orders"],
-                "pnl_total":  self.state["pnl_total"],
-                "pnl_log":    self.state["pnl_log"][-80:],
-                "trade_count": len(closed),
-                "win_rate":   wr,
-                "logs":       self._mem_logs[:100],
+                "running":       self.state["running"],
+                "mode":          self.cfg.get("mode", "paper"),
+                "symbols":       self.state["symbols"],
+                "positions":     self.state["positions"],
+                "orders":        self.state["orders"],
+                "pnl_total":     self.state["pnl_total"],
+                "pnl_log":       self.state["pnl_log"][-80:],
+                "trade_count":   len(closed),
+                "win_rate":      wr,
+                "logs":          self._mem_logs[:100],
+                "recent_trades": trades[:50],   # 最近50笔，供dashboard直接展示
+                "cfg_size":      self.cfg.get("position_size_usdt", 100),
             }
 
     def get_trades(self) -> list:
