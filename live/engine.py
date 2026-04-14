@@ -206,9 +206,10 @@ class LiveEngine:
                 if gain >= cfg["min_gain_24h"] and vol >= cfg["min_volume_usdt"]:
                     gainers.append(sym)
 
-            gainers.sort(key=lambda s: float(
-                next(t["priceChangePercent"] for t in data if t["symbol"]==s)
-            ), reverse=True)
+            # 构建symbol->gain的映射，避免O(n²)和KeyError
+            gain_map = {t["symbol"]: float(t.get("priceChangePercent", 0))
+                        for t in data if isinstance(t, dict)}
+            gainers.sort(key=lambda s: gain_map.get(s, 0), reverse=True)
             gainers = gainers[:15]
 
             with self._lock:
@@ -298,6 +299,10 @@ class LiveEngine:
                 return None
             prev = kdata[-3] if len(kdata) >= 3 else kdata[0]
             k    = kdata[-2]   # 已完整收盘
+            # ticker 单symbol时返回dict，全量时返回list；统一处理
+            if isinstance(ticker, list):
+                ticker = next((t for t in ticker if t.get("symbol") == symbol), {})
+            day_high = float(ticker.get("highPrice", 0)) if isinstance(ticker, dict) else 0.0
             return {
                 "open":       float(k[1]),
                 "high":       float(k[2]),
@@ -305,7 +310,7 @@ class LiveEngine:
                 "close":      float(k[4]),
                 "volume":     float(k[5]),
                 "prev_close": float(prev[4]),
-                "day_high":   float(ticker.get("highPrice", 0)),
+                "day_high":   day_high,
                 "close_time": datetime.fromtimestamp(
                     k[6]/1000, tz=timezone.utc
                 ).strftime("%H:%M:%S"),
@@ -357,7 +362,7 @@ class LiveEngine:
                 "ratio":        ratio,
                 "status":       "pending",
                 "binance_id":   None,
-                "client_id":    f"{symbol}_{int(time.time()*1000)}_{i+1}",
+                "client_id":    "".join(ch for ch in f"{symbol}_{int(time.time()*1000)}_{i+1}" if ch.isascii() and (ch.isalnum() or ch in "-_"))[:36],
             }
             if mode == "live" and self.client:
                 try:
@@ -443,6 +448,10 @@ class LiveEngine:
 
     def _check_exit(self, symbol: str, pos: dict, candle: dict) -> Optional[dict]:
         cfg   = self.cfg
+        # 防御：确保pos关键字段是数值类型（从JSON恢复后可能类型错误）
+        for key in ("entry_price", "qty", "stop_loss", "peak", "hold"):
+            if not isinstance(pos.get(key), (int, float)):
+                pos[key] = float(pos[key]) if key != "hold" else int(pos.get(key, 0))
         pos["hold"] = pos.get("hold", 0) + 1
         if candle["high"] > pos.get("peak", 0):
             pos["peak"] = candle["high"]
