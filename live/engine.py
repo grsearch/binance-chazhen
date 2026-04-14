@@ -366,8 +366,16 @@ class LiveEngine:
                     )
                     order_rec["binance_id"] = resp.get("orderId")
                     order_rec["status"]     = "pending"
+                except ValueError as e:
+                    self._log(symbol, f"下单跳过 档{i+1}: {e}")
+                    continue
                 except Exception as e:
-                    self._log(symbol, f"下单失败 档{i+1}: {e}")
+                    from binance_client import BinanceAPIError
+                    if isinstance(e, BinanceAPIError):
+                        self._log(symbol,
+                            f"下单失败 档{i+1} [币安{e.binance_code}]: {e.msg}")
+                    else:
+                        self._log(symbol, f"下单失败 档{i+1}: {e}")
                     continue
             new_orders.append(order_rec)
 
@@ -480,9 +488,12 @@ class LiveEngine:
         if mode == "live" and self.client:
             try:
                 self.client.place_market_sell(symbol, pos["qty"])
-                # 用实际成交价（近似用当前价）
             except Exception as e:
-                self._log(symbol, f"卖出失败: {e}")
+                from binance_client import BinanceAPIError
+                if isinstance(e, BinanceAPIError):
+                    self._log(symbol, f"卖出失败 [币安{e.binance_code}]: {e.msg}")
+                else:
+                    self._log(symbol, f"卖出失败: {e}")
                 return
 
         pnl_pct  = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 4)

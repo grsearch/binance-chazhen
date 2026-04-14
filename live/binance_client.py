@@ -9,9 +9,20 @@ import hashlib
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 import logging
+from decimal import Decimal, ROUND_DOWN
 from typing import Optional
+
+
+class BinanceAPIError(Exception):
+    """币安API错误，包含HTTP状态码和币安错误码"""
+    def __init__(self, http_code: int, binance_code: int, msg: str):
+        self.http_code     = http_code
+        self.binance_code  = binance_code
+        self.msg           = msg
+        super().__init__(f"HTTP {http_code} | 币安错误 {binance_code}: {msg}")
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +70,17 @@ class BinanceClient:
                 "User-Agent":   "spike-bot/2.0",
             }
         )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read())
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            try:
+                err = json.loads(body)
+                # 抛出带币安错误码和消息的异常，方便日志定位
+                raise BinanceAPIError(e.code, err.get("code", 0), err.get("msg", body))
+            except (json.JSONDecodeError, KeyError):
+                raise BinanceAPIError(e.code, 0, body)
 
     def _delete(self, path: str, params: dict) -> dict:
         params["timestamp"] = int(time.time() * 1000)
@@ -70,8 +90,16 @@ class BinanceClient:
             "X-MBX-APIKEY": self.api_key,
             "User-Agent":   "spike-bot/2.0",
         })
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read())
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            try:
+                err = json.loads(body)
+                raise BinanceAPIError(e.code, err.get("code", 0), err.get("msg", body))
+            except (json.JSONDecodeError, KeyError):
+                raise BinanceAPIError(e.code, 0, body)
 
     # ── 公开接口 ──────────────────────────────────────
 
@@ -207,20 +235,32 @@ class BinanceClient:
         return self._filters_cache[symbol]
 
     def _fmt_price(self, price: float, symbol: str) -> str:
-        """按交易对tick_size格式化价格"""
+        """按交易对tick_size格式化价格（用Decimal避免浮点误差）"""
         f    = self._get_filters(symbol)
         tick = f["tick_size"]
-        if tick >= 1:
-            return str(int(round(price / tick) * tick))
-        decimals = len(str(tick).rstrip("0").split(".")[-1])
-        return f"{round(round(price / tick) * tick, decimals):.{decimals}f}"
+        tick_d  = Decimal(str(tick))
+        price_d = Decimal(str(price))
+        # 向下取整到tick精度（保守，不会超过实际价格）
+        formatted = (price_d / tick_d).to_integral_value(rounding=ROUND_DOWN) * tick_d
+        # 格式化小数位数与tick一致
+        return str(formatted.normalize()) if '.' in str(tick_d.normalize()) else str(int(formatted))
 
     def _fmt_qty(self, qty: float, symbol: str) -> str:
-        """按交易对step_size格式化数量"""
+        """按交易对step_size格式化数量（Decimal精确截断 + 最小数量检查）"""
         f    = self._get_filters(symbol)
         step = f["step_size"]
-        if step >= 1:
-            return str(int(qty // step * step))
-        decimals = len(str(step).rstrip("0").split(".")[-1])
-        floored  = int(qty / step) * step
-        return f"{floored:.{decimals}f}"
+        min_qty = f["min_qty"]
+        step_d = Decimal(str(step))
+        qty_d  = Decimal(str(qty))
+        floored = (qty_d / step_d).to_integral_value(rounding=ROUND_DOWN) * step_d
+        if float(floored) < min_qty:
+            raise ValueError(
+                f"数量 {float(floored)} 低于最小下单量 {min_qty}（{symbol}），"
+                f"请增加 position_size_usdt"
+            )
+        # 格式化：与step小数位数一致，不产生科学计数法
+        step_str = str(step_d.normalize())
+        if '.' in step_str:
+            decimals = len(step_str.split('.')[-1])
+            return f"{float(floored):.{decimals}f}"
+        return str(int(floored))
