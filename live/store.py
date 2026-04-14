@@ -65,13 +65,10 @@ DEFAULT_CONFIG = {
     "api_key":           "",
     "api_secret":        "",
     "max_open_positions": 3,        # 同时最多持仓币种数
-<<<<<<< HEAD
     # WebSocket秒级持仓参数
     "ws_stop_loss_pct":    1.5,     # 止损%（相对买入均价）
     "ws_take_profit_pct":  2.5,     # 止盈%
     "ws_max_hold_seconds": 5,       # 最大持仓秒数
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 }
 
 
@@ -140,9 +137,18 @@ def save_state(state: dict) -> None:
 # ── Log ──────────────────────────────────────────────
 
 def append_log(symbol: str, msg: str) -> None:
-    ts  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import timezone as _tz
+    ts   = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] [{symbol}] {msg}\n"
     with _lock:
+        try:
+            if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 10*1024*1024:
+                with open(LOG_FILE,"r",encoding="utf-8",errors="replace") as f:
+                    lines = f.readlines()
+                with open(LOG_FILE,"w",encoding="utf-8") as f:
+                    f.writelines(lines[len(lines)//2:])
+        except Exception:
+            pass
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line)
 

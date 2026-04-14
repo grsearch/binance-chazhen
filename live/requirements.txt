@@ -1,6 +1,3 @@
 flask>=3.0.0
 flask-cors>=4.0.0
-<<<<<<< HEAD
 websocket-client>=1.7.0
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0

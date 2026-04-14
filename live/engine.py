@@ -9,6 +9,9 @@ import time
 import threading
 import logging
 from datetime import datetime, timezone
+import os
+# 强制UTC时区，与币安服务器保持一致
+os.environ.setdefault("TZ", "UTC")
 from typing import Optional
 
 from binance_client import BinanceClient
@@ -16,10 +19,7 @@ from store import (
     load_config, save_config, load_state, save_state,
     load_trades, append_trade, append_log, read_recent_logs,
 )
-<<<<<<< HEAD
 from ws_monitor import PositionMonitorManager
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,8 @@ class LiveEngine:
         self._stop_event = threading.Event()
         # 内存日志（最近200条，供API快速返回）
         self._mem_logs: list[dict] = read_recent_logs(200)
-<<<<<<< HEAD
         # WebSocket秒级持仓监控
         self._ws_mgr = PositionMonitorManager()
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
     def _make_client(self) -> Optional[BinanceClient]:
         key    = self.cfg.get("api_key", "")
@@ -110,10 +107,7 @@ class LiveEngine:
 
     def stop(self) -> dict:
         self._stop_event.set()
-<<<<<<< HEAD
         self._ws_mgr.stop_all()
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
         with self._lock:
             self.state["running"] = False
             save_state(self.state)
@@ -460,18 +454,19 @@ class LiveEngine:
                 return
 
         slots = [
-            (close * (1 - cfg["order_pct_1"]/100), cfg["order_ratio_1"]),
-            (close * (1 - cfg["order_pct_2"]/100), cfg["order_ratio_2"]),
-            (close * (1 - cfg["order_pct_3"]/100), cfg["order_ratio_3"]),
+            (close * (1 - cfg["order_pct_1"]/100), cfg["order_ratio_1"], cfg["order_pct_1"]),
+            (close * (1 - cfg["order_pct_2"]/100), cfg["order_ratio_2"], cfg["order_pct_2"]),
+            (close * (1 - cfg["order_pct_3"]/100), cfg["order_ratio_3"], cfg["order_pct_3"]),
         ]
         new_orders = []
-        for i, (price, ratio) in enumerate(slots):
+        for i, (price, ratio, pct) in enumerate(slots):
             qty = (total * ratio) / price
             order_rec = {
                 "tier":         i + 1,
                 "price":        round(price, 8),
                 "qty":          round(qty, 6),
                 "ratio":        ratio,
+                "pct":          pct,
                 "status":       "pending",
                 "binance_id":   None,
                 "client_id":    "".join(ch for ch in f"{symbol}_{int(time.time()*1000)}_{i+1}" if ch.isascii() and (ch.isalnum() or ch in "-_"))[:36],
@@ -556,7 +551,6 @@ class LiveEngine:
             self.state["positions"][symbol] = pos
             save_state(self.state)
         self._log(symbol,
-<<<<<<< HEAD
             f"入场 {len(filled)}档成交 均价={avg:.6f} "
             f"WS止损={self.cfg.get('ws_stop_loss_pct',1.5)}% "
             f"WS止盈={self.cfg.get('ws_take_profit_pct',2.5)}% "
@@ -573,9 +567,6 @@ class LiveEngine:
             mode         = mode,
             rest_price_fn= self._get_current_price,
         )
-=======
-            f"入场 {len(filled)}档成交 均价={avg:.6f} 止损={pos['stop_loss']:.6f}")
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
     # ── 出场判断 ─────────────────────────────────────
 
@@ -628,15 +619,36 @@ class LiveEngine:
         reason     = exit_info["reason"]
 
         if mode == "live" and self.client:
+            sell_qty = pos["qty"]
             try:
-                self.client.place_market_sell(symbol, pos["qty"])
+                self.client.place_market_sell(symbol, sell_qty)
             except Exception as e:
                 from binance_client import BinanceAPIError
-                if isinstance(e, BinanceAPIError):
-                    self._log(symbol, f"卖出失败 [币安{e.binance_code}]: {e.msg}")
+                if isinstance(e, BinanceAPIError) and e.binance_code == -2010:
+                    try:
+                        asset = symbol.replace("USDT","")
+                        actual = self.client.get_asset_balance(asset)
+                        if actual > 0:
+                            self._log(symbol, f"余额不足重试 实际持有={actual:.6f}")
+                            self.client.place_market_sell(symbol, actual)
+                            sell_qty = actual
+                        else:
+                            self._log(symbol, "实际余额0，清除持仓记录")
+                            with self._lock:
+                                del self.state["positions"][symbol]
+                                save_state(self.state)
+                            return
+                    except Exception as e2:
+                        self._log(symbol, f"重试卖出失败: {e2}")
+                        return
                 else:
-                    self._log(symbol, f"卖出失败: {e}")
-                return
+                    if isinstance(e, BinanceAPIError):
+                        self._log(symbol, f"卖出失败 [币安{e.binance_code}]: {e.msg}")
+                    else:
+                        self._log(symbol, f"卖出失败: {e}")
+                    return
+            pos = dict(pos)
+            pos["qty"] = sell_qty
 
         pnl_pct  = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 4)
         pnl_usdt = round((exit_price - pos["entry_price"]) * pos["qty"], 4)
@@ -671,7 +683,6 @@ class LiveEngine:
             f"出场:{reason} 均价={exit_price:.6f} "
             f"PnL={pnl_pct:+.2f}% ({pnl_usdt:+.4f}U)")
 
-<<<<<<< HEAD
     # ── WebSocket出场回调 ───────────────────────────────
 
     def _ws_on_exit(self, symbol: str, exit_price: float, reason: str,
@@ -686,10 +697,29 @@ class LiveEngine:
                 self.client.place_market_sell(symbol, qty)
             except Exception as e:
                 from binance_client import BinanceAPIError
-                msg = f"[币安{e.binance_code}]: {e.msg}"                       if isinstance(e, BinanceAPIError) else str(e)
-                self._log(symbol, f"WS卖出失败: {msg}")
-                # 卖出失败不清仓，等下一个K线的_check_exit兜底
-                return
+                if isinstance(e, BinanceAPIError) and e.binance_code == -2010:
+                    # 余额不足：查实际持有量重试
+                    try:
+                        asset = symbol.replace("USDT","")
+                        actual = self.client.get_asset_balance(asset)
+                        if actual > 0:
+                            self._log(symbol, f"余额不足重试 实际持有={actual:.6f}")
+                            self.client.place_market_sell(symbol, actual)
+                            qty = actual
+                        else:
+                            self._log(symbol, "实际余额0，清除持仓记录")
+                            with self._lock:
+                                self.state["positions"].pop(symbol, None)
+                                save_state(self.state)
+                            self._ws_mgr.on_exit_done(symbol)
+                            return
+                    except Exception as e2:
+                        self._log(symbol, f"重试卖出失败: {e2}")
+                        return
+                else:
+                    msg = f"[币安{e.binance_code}]: {e.msg}" if isinstance(e, BinanceAPIError) else str(e)
+                    self._log(symbol, f"WS卖出失败: {msg}")
+                    return
 
         pnl_pct  = round((exit_price - entry_price) / entry_price * 100, 4)
         pnl_usdt = round((exit_price - entry_price) * qty, 4)
@@ -715,10 +745,8 @@ class LiveEngine:
             self.state["pnl_total"] = round(
                 self.state.get("pnl_total", 0) + pnl_usdt, 4)
             log = self.state.get("pnl_log", [])
-            log.append(pnl_pct)
-            if len(log) > 200:
-                log = log[-200:]
-            self.state["pnl_log"] = log
+            log.append(round(pnl_pct, 4))
+            self.state["pnl_log"] = log[-200:]  # 只保留最近200条
             save_state(self.state)
 
         self._ws_mgr.on_exit_done(symbol)
@@ -737,8 +765,6 @@ class LiveEngine:
         except Exception:
             return 0.0
 
-=======
->>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
     # ── 撤单 ─────────────────────────────────────────
 
     def _cancel_pending_orders(self, symbol: str, orders: list, mode: str):
@@ -760,13 +786,13 @@ class LiveEngine:
     def _log(self, symbol: str, msg: str):
         append_log(symbol, msg)
         entry = {
-            "time":   datetime.now().strftime("%H:%M:%S"),
+            "time":   datetime.now(timezone.utc).strftime("%H:%M:%S"),
             "symbol": symbol,
             "msg":    msg,
         }
         self._mem_logs.insert(0, entry)
-        if len(self._mem_logs) > 400:
-            self._mem_logs = self._mem_logs[:400]
+        if len(self._mem_logs) > 200:
+            self._mem_logs = self._mem_logs[:200]
 
 
 # ── 单例 ─────────────────────────────────────────────
