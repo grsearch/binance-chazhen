@@ -63,9 +63,12 @@ header {
   color:var(--muted); display:flex; align-items:center; gap:5px;
 }
 .scan-countdown span { color:var(--amber); }
+<<<<<<< HEAD
 .mode-tag { font-size:11px; padding:2px 8px; border-radius:4px; font-weight:600; letter-spacing:.5px; }
 .mode-tag.paper { background:rgba(56,189,248,.15); color:var(--blue); }
 .mode-tag.live  { background:rgba(244,63,94,.15);  color:var(--red);  }
+=======
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
 
 /* ── Tabs ── */
 .tabs { display:flex; padding:0 28px; border-bottom:1px solid var(--border); background:var(--bg2); }
@@ -243,7 +246,10 @@ header {
     插针策略 Dashboard
   </div>
   <div class="hdr-right">
+<<<<<<< HEAD
     <span class="mode-tag paper" id="modeTag">虚拟盘</span>
+=======
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
     <div class="scan-countdown" id="scanCountdown" style="display:none">
       自动扫描 <span id="scanCountdownVal">--</span>
     </div>
@@ -299,6 +305,7 @@ header {
     <div class="card">
       <div class="scanner-header">
         <div>
+<<<<<<< HEAD
           <div class="card-title" style="margin:0">监控币种</div>
           <div class="scanner-info">每15分钟自动扫描涨幅榜</div>
         </div>
@@ -315,6 +322,16 @@ header {
       <div class="scanner-list" id="symbolList">
         <div style="color:var(--muted);font-size:13px;text-align:center;padding:16px 0">
           启动后自动扫描
+=======
+          <div class="card-title" style="margin:0">涨幅榜扫描</div>
+          <div class="scanner-info" id="scannerInfo">每15分钟自动刷新</div>
+        </div>
+        <button class="btn btn-primary" onclick="manualScan()" id="btnScan">立即扫描</button>
+      </div>
+      <div class="scanner-list" id="scannerList">
+        <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">
+          启动后自动扫描，或点「立即扫描」
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
         </div>
       </div>
     </div>
@@ -367,7 +384,11 @@ header {
       <table class="tbl">
         <thead>
           <tr>
+<<<<<<< HEAD
             <th>入场时间</th><th>币种</th><th>模式</th><th>入场价</th><th>出场价</th>
+=======
+            <th>入场时间</th><th>币种</th><th>入场价</th><th>出场价</th>
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
             <th>盈亏%</th><th>盈亏USDT</th><th>持仓K线</th><th>出场原因</th>
           </tr>
         </thead>
@@ -496,6 +517,7 @@ header {
     <div class="cfg-grid" style="margin-bottom:22px">
       <div class="field"><label>每次投入 (USDT)</label><input id="c-size" value="100"></div>
       <div class="field"><label>出场冷却K线数</label><input id="c-cool" value="2"></div>
+<<<<<<< HEAD
     </div>
     <div class="card-title">实盘设置</div>
     <div class="cfg-grid" style="margin-bottom:22px">
@@ -516,6 +538,8 @@ header {
     <div style="background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.25);
       border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--red)">
       ⚠ 切换到实盘前请确认：API Key 只开启现货交易权限，禁止提现权限。建议先用虚拟盘测试稳定后再切换。
+=======
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" onclick="saveCfg()">保存配置</button>
@@ -531,6 +555,7 @@ header {
 'use strict';
 
 // ═══════════════════════════════════════════════════
+<<<<<<< HEAD
 // API 基础地址（Flask后端）
 // ═══════════════════════════════════════════════════
 const API_BASE = '';   // 同域，空字符串即可；若跨域改为 'http://服务器IP:8888'
@@ -828,25 +853,640 @@ async function fetchKlinesForBt(symbol, startMs, endMs) {
     open: +k[1], high: +k[2], low: +k[3], close: +k[4],
     prev_close: i>0 ? +all[i-1][4] : +k[1],
     close_time: new Date(k[6]).toLocaleTimeString('zh-CN',{hour12:false}),
+=======
+// 常量
+// ═══════════════════════════════════════════════════
+const LS_KEY   = 'spike_dashboard_v2';   // localStorage key
+const SCAN_INTERVAL_MS = 15 * 60 * 1000; // 15分钟自动扫描
+
+// ═══════════════════════════════════════════════════
+// 全局状态（运行时，不持久化）
+// ═══════════════════════════════════════════════════
+const RT = {
+  running:      false,
+  tickTimer:    null,   // K线整点定时器
+  scanTimer:    null,   // 15分钟扫描定时器
+  cntdwnTimer:  null,   // 倒计时UI定时器
+  nextTickAt:   0,      // 下次触发的时间戳
+  lastScanAt:   0,      // 上次扫描时间戳
+  openPos:      {},     // symbol -> position
+  pending:      {},     // symbol -> orders[]
+  btEquity:     null,
+  btReason:     null,
+};
+
+// ═══════════════════════════════════════════════════
+// 持久化状态（存 localStorage）
+// ═══════════════════════════════════════════════════
+let PS = loadPS();
+
+function defaultPS() {
+  return {
+    cfg: defaultCfg(),
+    symbols:   [],     // 当前监控的币种
+    trades:    [],     // 已完成交易
+    pnlTotal:  0,
+    pnlLog:    [],
+    wasRunning: false, // 上次关闭时是否在运行
+  };
+}
+
+function loadPS() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return defaultPS();
+    const d = JSON.parse(raw);
+    // 合并默认值（防止新字段缺失）
+    return { ...defaultPS(), ...d, cfg: { ...defaultCfg(), ...(d.cfg || {}) } };
+  } catch { return defaultPS(); }
+}
+
+function savePS() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      cfg:        PS.cfg,
+      symbols:    PS.symbols,
+      trades:     PS.trades,
+      pnlTotal:   PS.pnlTotal,
+      pnlLog:     PS.pnlLog,
+      wasRunning: RT.running,
+    }));
+  } catch(e) { console.warn('localStorage写入失败', e); }
+}
+
+function defaultCfg() {
+  return {
+    min_gain:         30,
+    min_vol:          500000,
+    high_price_ratio: 0.80,
+    order_pct:   [4, 6, 9],
+    order_ratio: [0.4, 0.35, 0.25],
+    sl_pct:      3,
+    tp_pct:      5,
+    max_hold:    10,
+    trail_red:   1.0,
+    size:        100,
+    cooldown:    2,
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// 工具
+// ═══════════════════════════════════════════════════
+const $  = id => document.getElementById(id);
+const fmt  = (n, d=2) => Number(n).toFixed(d);
+const fmtP = n => Number(n).toFixed(6);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function nowT() { return new Date().toLocaleTimeString('zh-CN', {hour12:false}); }
+function nowS() {
+  return new Date().toLocaleTimeString('zh-CN', {hour12:false, hour:'2-digit', minute:'2-digit'});
+}
+
+// ═══════════════════════════════════════════════════
+// 日志
+// ═══════════════════════════════════════════════════
+function addLog(sym, msg, type='') {
+  const panel = $('logPanel');
+  const div = document.createElement('div');
+  div.className = 'll';
+  div.innerHTML =
+    `<span class="lt">${nowS()}</span>`
+    + `<span class="ls">${String(sym).slice(0,10)}</span>`
+    + `<span class="lm ${type}">${msg}</span>`;
+  panel.appendChild(div);
+  while (panel.children.length > 400) panel.removeChild(panel.firstChild);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════
+// 币安 API（公开，无需 Key）
+// ═══════════════════════════════════════════════════
+const API = 'https://api.binance.com';
+async function apiFetch(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`Binance API ${r.status}`);
+  return r.json();
+}
+
+const BL_EXACT = new Set(['USDCUSDT','BUSDUSDT','TUSDUSDT','FDUSDUSDT','DAIUSDT']);
+const BL_KW    = ['UP','DOWN','BULL','BEAR','3L','3S'];
+
+async function getTopGainers() {
+  const data = await apiFetch('/api/v3/ticker/24hr');
+  const cfg  = PS.cfg;
+  return data
+    .filter(t => {
+      if (!t.symbol.endsWith('USDT')) return false;
+      if (BL_EXACT.has(t.symbol)) return false;
+      const base = t.symbol.slice(0,-4);
+      if (BL_KW.some(k => base.includes(k))) return false;
+      return parseFloat(t.priceChangePercent) >= cfg.min_gain
+          && parseFloat(t.quoteVolume)        >= cfg.min_vol;
+    })
+    .sort((a,b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent))
+    .slice(0, 15)
+    .map(t => ({
+      symbol: t.symbol,
+      gain:   parseFloat(t.priceChangePercent).toFixed(2),
+      vol:    (parseFloat(t.quoteVolume)/1e6).toFixed(2) + 'M',
+      price:  parseFloat(t.lastPrice),
+    }));
+}
+
+// 获取最新已收盘的1分钟K线（拉3根取倒数第2根）
+async function getClosedKline(symbol) {
+  // 同时拉K线和24h行情（获取当日最高价，用于高位保护判断）
+  const [kData, ticker] = await Promise.all([
+    apiFetch(`/api/v3/klines?symbol=${symbol}&interval=1m&limit=3`),
+    apiFetch(`/api/v3/ticker/24hr?symbol=${symbol}`),
+  ]);
+  if (kData.length < 2) return null;
+  const prev    = kData[kData.length - 3] || kData[0];
+  const k       = kData[kData.length - 2];  // 已完整收盘
+  return {
+    open:       parseFloat(k[1]),
+    high:       parseFloat(k[2]),
+    low:        parseFloat(k[3]),
+    close:      parseFloat(k[4]),
+    volume:     parseFloat(k[5]),
+    prev_close: parseFloat(prev[4]),
+    day_high:   parseFloat(ticker.highPrice || 0),  // 当日最高价
+    close_time: new Date(k[6]).toLocaleTimeString('zh-CN', {hour12:false}),
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// 策略核心（与 strategy.py 逻辑对齐）
+// ═══════════════════════════════════════════════════
+function shouldPlaceOrders(c) {
+  if (c.close >= c.open) return false;
+  if (c.day_high > 0 && c.close < c.day_high * PS.cfg.high_price_ratio) return false;
+  return true;
+}
+
+function calcOrderPrices(close) {
+  return PS.cfg.order_pct.map((pct, i) => ({
+    price: close * (1 - pct / 100),
+    ratio: PS.cfg.order_ratio[i],
+    pct,
+  }));
+}
+
+function processCandle(symbol, c) {
+  const cfg  = PS.cfg;
+  const pos  = RT.openPos[symbol];
+  const ords = RT.pending[symbol] || [];
+
+  // 1. 检查挂单成交
+  if (ords.length && !pos) {
+    const filled = ords.filter(o => o.status === 'pending' && c.low <= o.price);
+    if (filled.length) {
+      const tc = filled.reduce((s,o) => s + o.price * o.qty, 0);
+      const tq = filled.reduce((s,o) => s + o.qty, 0);
+      const avg = tc / tq;
+      RT.openPos[symbol] = {
+        entry_price: avg, qty: tq,
+        entry_time:  c.close_time,
+        stop_loss:   avg * (1 - cfg.sl_pct / 100),
+        peak: avg, had_green: false, hold: 0,
+      };
+      addLog(symbol,
+        `入场 ${filled.length}档 均价=${fmtP(avg)} 止损=${fmtP(RT.openPos[symbol].stop_loss)}`,
+        'entry');
+    }
+    ords.forEach(o => { if (o.status === 'pending') o.status = 'cancelled'; });
+    RT.pending[symbol] = [];
+    renderOrderSlots();
+  }
+
+  // 2. 检查出场
+  const p = RT.openPos[symbol];
+  if (p) {
+    p.hold++;
+    if (c.high > p.peak) p.peak = c.high;
+    let exit = null;
+
+    if (c.low <= p.stop_loss) {
+      exit = { price: p.stop_loss, reason: '止损' };
+    } else if (p.hold >= cfg.max_hold) {
+      exit = { price: c.close, reason: '超时出局' };
+    } else if ((c.high - p.entry_price) / p.entry_price * 100 >= cfg.tp_pct) {
+      p.stop_loss = p.entry_price;
+      if (c.close >= p.entry_price * (1 + cfg.tp_pct / 100))
+        exit = { price: c.close, reason: `止盈${cfg.tp_pct}%` };
+    }
+    if (!exit) {
+      if (c.close > p.entry_price) {
+        p.had_green = true;
+        p.stop_loss = Math.max(p.stop_loss, p.entry_price);
+      }
+      if (p.had_green && c.close < c.open &&
+          (c.open - c.close) / c.open * 100 >= cfg.trail_red)
+        exit = { price: c.close, reason: '回弹后阴线' };
+    }
+
+    if (exit) {
+      const pnl_pct  = (exit.price - p.entry_price) / p.entry_price * 100;
+      const pnl_usdt = (exit.price - p.entry_price) * p.qty;
+      const trade = {
+        symbol, entry_price: p.entry_price, qty: p.qty,
+        entry_time: p.entry_time, exit_price: exit.price,
+        exit_time: c.close_time, exit_reason: exit.reason,
+        hold_candles: p.hold, pnl_pct, pnl_usdt, status: 'closed',
+      };
+      PS.trades.unshift(trade);
+      PS.pnlTotal += pnl_usdt;
+      PS.pnlLog.push(pnl_pct);
+      // 只保留最近200笔
+      if (PS.trades.length > 200) PS.trades = PS.trades.slice(0, 200);
+      if (PS.pnlLog.length > 200) PS.pnlLog = PS.pnlLog.slice(-200);
+      delete RT.openPos[symbol];
+      addLog(symbol,
+        `出场:${exit.reason} ${pnl_pct >= 0 ? '+' : ''}${fmt(pnl_pct)}% `
+        + `(${pnl_usdt >= 0 ? '+' : ''}${fmt(pnl_usdt)}U)`,
+        pnl_pct >= 0 ? 'entry' : 'exit');
+      savePS();
+      updateMetrics();
+      renderTradeTable();
+      renderPnlBars();
+    }
+    renderOrderSlots();
+    return;
+  }
+
+  // 3. 评估挂新单
+  if (!RT.openPos[symbol] && shouldPlaceOrders(c)) {
+    const slots = calcOrderPrices(c.close);
+    RT.pending[symbol] = slots.map(s => ({
+      price: s.price, qty: (cfg.size * s.ratio) / s.price,
+      ratio: s.ratio, pct: s.pct, status: 'pending',
+    }));
+    addLog(symbol,
+      `挂单:收盘=${fmtP(c.close)} → ${slots.map(s => fmtP(s.price)).join(' / ')}`,
+      'order');
+    renderOrderSlots();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// 虚拟盘主循环 — 对齐K线整点
+// ═══════════════════════════════════════════════════
+
+// 计算距离下一个整分钟还有多少ms（+2秒缓冲，等K线完全收盘）
+function msUntilNextMinute() {
+  const now = Date.now();
+  const ms  = now % 60000;
+  return (60000 - ms) + 2000; // 整点后2秒触发
+}
+
+async function paperTick() {
+  if (!RT.running) return;
+  if (!PS.symbols.length) return;
+
+  addLog('SYS', `K线触发 监控${PS.symbols.length}个币种`, 'system');
+
+  for (const sym of PS.symbols) {
+    try {
+      const c = await getClosedKline(sym);
+      if (c) processCandle(sym, c);
+    } catch(e) {
+      // 单币种请求失败不中断整体
+    }
+    await sleep(300);  // 间隔300ms，避免频繁请求
+  }
+
+  updateMetrics();
+  // 安排下次整点触发
+  scheduleNextTick();
+}
+
+function scheduleNextTick() {
+  clearTimeout(RT.tickTimer);
+  const delay = msUntilNextMinute();
+  RT.nextTickAt = Date.now() + delay;
+  RT.tickTimer  = setTimeout(paperTick, delay);
+  $('tickBar').style.display = 'flex';
+  $('tickSymCount').textContent = `监控 ${PS.symbols.length} 个币种`;
+}
+
+// ═══════════════════════════════════════════════════
+// 15分钟自动扫描
+// ═══════════════════════════════════════════════════
+async function autoScan(isManual = false) {
+  if (!isManual) addLog('SYS', '自动扫描涨幅榜...', 'scan');
+  try {
+    const gainers = await getTopGainers();
+    RT.lastScanAt = Date.now();
+    $('m-scan-ts').textContent = `上次扫描 ${nowS()}`;
+
+    // 自动添加新符合条件的币种
+    let added = 0;
+    for (const g of gainers) {
+      if (!PS.symbols.includes(g.symbol)) {
+        PS.symbols.push(g.symbol);
+        added++;
+      }
+    }
+
+    // 自动移除不再符合条件的币种（但保留有持仓/挂单的）
+    const gainSet = new Set(gainers.map(g => g.symbol));
+    PS.symbols = PS.symbols.filter(sym =>
+      gainSet.has(sym) || RT.openPos[sym] || (RT.pending[sym]?.some(o => o.status === 'pending'))
+    );
+
+    renderScannerList(gainers);
+    savePS();
+
+    if (added > 0)
+      addLog('SYS', `扫描完成 发现${gainers.length}个 新增${added}个`, 'scan');
+    else
+      addLog('SYS', `扫描完成 ${gainers.length}个符合条件`, 'scan');
+
+    updateMetrics();
+  } catch(e) {
+    addLog('SYS', `扫描失败: ${e.message}`, 'exit');
+  }
+}
+
+async function manualScan() {
+  const btn = $('btnScan');
+  btn.textContent = '扫描中...'; btn.disabled = true;
+  await autoScan(true);
+  btn.textContent = '立即扫描'; btn.disabled = false;
+}
+
+function startScanTimer() {
+  clearInterval(RT.scanTimer);
+  // 立即扫描一次，然后每15分钟
+  autoScan();
+  RT.scanTimer = setInterval(() => autoScan(), SCAN_INTERVAL_MS);
+}
+
+// ═══════════════════════════════════════════════════
+// 启动 / 停止 / 重置
+// ═══════════════════════════════════════════════════
+function startPaper() {
+  RT.running = true;
+  $('btnStart').disabled = true;
+  $('btnStop').disabled  = false;
+  $('statusDot').className = 'status-dot running';
+  $('statusText').textContent = '运行中';
+  $('scanCountdown').style.display = 'flex';
+  addLog('SYS', '虚拟盘启动', 'entry');
+
+  startScanTimer();
+  scheduleNextTick();
+  savePS();
+}
+
+function stopPaper() {
+  RT.running = false;
+  clearTimeout(RT.tickTimer);
+  clearInterval(RT.scanTimer);
+  $('btnStart').disabled = false;
+  $('btnStop').disabled  = true;
+  $('statusDot').className = 'status-dot stopped';
+  $('statusText').textContent = '已停止';
+  $('tickBar').style.display = 'none';
+  $('scanCountdown').style.display = 'none';
+  addLog('SYS', '虚拟盘已停止', 'system');
+  savePS();
+}
+
+function confirmReset() {
+  if (!confirm('确定要重置吗？所有交易记录和持仓将被清空。')) return;
+  stopPaper();
+  PS.trades    = [];
+  PS.pnlTotal  = 0;
+  PS.pnlLog    = [];
+  PS.symbols   = [];
+  RT.openPos   = {};
+  RT.pending   = {};
+  $('statusDot').className = 'status-dot';
+  $('statusText').textContent = '就绪';
+  $('scannerList').innerHTML =
+    '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">启动后自动扫描，或点「立即扫描」</div>';
+  savePS();
+  updateMetrics();
+  renderTradeTable();
+  renderPnlBars();
+  renderOrderSlots();
+  $('logPanel').innerHTML =
+    '<div class="ll"><span class="lt">--:--</span><span class="ls">SYS</span>'
+    + '<span class="lm system">已重置</span></div>';
+}
+
+// ═══════════════════════════════════════════════════
+// UI 渲染
+// ═══════════════════════════════════════════════════
+function updateMetrics() {
+  const wins  = PS.trades.filter(t => t.pnl_pct > 0);
+  const wr    = PS.trades.length ? (wins.length / PS.trades.length * 100).toFixed(1) : '--';
+  const openN = Object.keys(RT.openPos).length;
+  const ordN  = Object.values(RT.pending)
+    .reduce((s, ords) => s + ords.filter(o => o.status === 'pending').length, 0);
+
+  const pEl = $('m-pnl');
+  pEl.textContent = (PS.pnlTotal >= 0 ? '+' : '') + fmt(PS.pnlTotal);
+  pEl.className   = 'metric-value ' + (PS.pnlTotal >= 0 ? 'pos' : 'neg');
+  $('m-pnl-pct').textContent = fmt(PS.pnlTotal / (PS.cfg.size || 100) * 100) + '%';
+  $('m-trades').textContent  = PS.trades.length;
+  $('m-wr').textContent      = `胜率 ${wr}%`;
+  $('m-open').textContent    = openN;
+  $('m-orders').textContent  = `挂单 ${ordN} 档`;
+  $('m-syms').textContent    = PS.symbols.length;
+}
+
+function renderScannerList(gainers) {
+  const el = $('scannerList');
+  if (!gainers || !gainers.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">当前无满足条件币种</div>';
+    return;
+  }
+  el.innerHTML = gainers.map(g => {
+    const sel = PS.symbols.includes(g.symbol);
+    return `<div class="scanner-item ${sel ? 'selected' : ''}"
+         onclick="toggleSym('${g.symbol}', this)">
+      <div>
+        <div class="scanner-sym">
+          ${g.symbol}
+          ${sel ? '<span class="scanner-badge">监控中</span>' : ''}
+        </div>
+        <div class="scanner-vol">Vol ${g.vol}</div>
+      </div>
+      <div class="scanner-gain">+${g.gain}%</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSym(sym, el) {
+  const idx = PS.symbols.indexOf(sym);
+  if (idx >= 0) {
+    // 有持仓时不允许移除
+    if (RT.openPos[sym]) {
+      addLog('SYS', `${sym} 有持仓，不能移除`, 'exit');
+      return;
+    }
+    PS.symbols.splice(idx, 1);
+    el.classList.remove('selected');
+    el.querySelector('.scanner-sym').innerHTML =
+      sym;  // 去掉badge
+    addLog('SYS', `取消监控: ${sym}`, 'system');
+  } else {
+    PS.symbols.push(sym);
+    el.classList.add('selected');
+    el.querySelector('.scanner-sym').innerHTML =
+      `${sym} <span class="scanner-badge">监控中</span>`;
+    addLog('SYS', `添加监控: ${sym}`, 'entry');
+  }
+  $('tickSymCount').textContent = `监控 ${PS.symbols.length} 个币种`;
+  savePS();
+  updateMetrics();
+}
+
+function renderTradeTable() {
+  const body = $('tradeBody');
+  if (!PS.trades.length) {
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:22px">暂无交易记录</td></tr>';
+    return;
+  }
+  body.innerHTML = PS.trades.slice(0, 80).map(t => `
+    <tr>
+      <td class="neu">${t.entry_time}</td>
+      <td style="font-weight:600">${t.symbol}</td>
+      <td>${fmtP(t.entry_price)}</td>
+      <td>${fmtP(t.exit_price)}</td>
+      <td class="${t.pnl_pct >= 0 ? 'pos' : 'neg'}">${t.pnl_pct >= 0 ? '+' : ''}${fmt(t.pnl_pct)}%</td>
+      <td class="${t.pnl_usdt >= 0 ? 'pos' : 'neg'}">${t.pnl_usdt >= 0 ? '+' : ''}${fmt(t.pnl_usdt)}</td>
+      <td class="neu">${t.hold_candles}</td>
+      <td class="neu">${t.exit_reason}</td>
+    </tr>`).join('');
+}
+
+function renderPnlBars() {
+  const el = $('pnlBars');
+  if (!PS.pnlLog.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:11px;margin:auto;font-family:\'JetBrains Mono\',monospace">暂无记录</div>';
+    return;
+  }
+  const logs   = PS.pnlLog.slice(-80);
+  const maxAbs = Math.max(...logs.map(Math.abs), 0.01);
+  el.innerHTML = logs.map(p => {
+    const h = Math.abs(p) / maxAbs * 62;
+    const c = p >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div class="pnl-bar" style="height:${h}px;background:${c};opacity:.8"
+      data-tip="${p >= 0 ? '+' : ''}${fmt(p)}%"></div>`;
+  }).join('');
+}
+
+function renderOrderSlots() {
+  const el = $('orderSlots');
+  const rows = [];
+  for (const [sym, pos] of Object.entries(RT.openPos)) {
+    rows.push({ sym, tier:'持', price: pos.entry_price,
+      pct: null, hold: pos.hold, status: 'filled' });
+  }
+  for (const [sym, ords] of Object.entries(RT.pending)) {
+    ords.filter(o => o.status !== 'cancelled').forEach((o, i) => {
+      rows.push({ sym, tier: i+1, price: o.price, pct: o.pct, hold: null, status: o.status });
+    });
+  }
+  if (!rows.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">当前无挂单</div>';
+    return;
+  }
+  el.innerHTML = rows.map(r => `
+    <div class="order-slot ${r.status}">
+      <span class="slot-tier">#${r.tier}</span>
+      <span class="slot-sym">${r.sym}</span>
+      <span class="slot-price">${fmtP(r.price)}</span>
+      <span class="slot-pct">${r.pct != null ? '-'+r.pct+'%' : r.hold != null ? `持${r.hold}根` : ''}</span>
+      <span class="slot-status ${r.status}">${
+        r.status === 'filled'  ? '✓ 持仓中' :
+        r.status === 'pending' ? '⏳ 等待' : '✗ 已撤'
+      }</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// 倒计时 UI（每秒刷新）
+// ═══════════════════════════════════════════════════
+function updateCountdownUI() {
+  // K线触发倒计时
+  if (RT.running && RT.nextTickAt > 0) {
+    const rem = Math.max(0, RT.nextTickAt - Date.now());
+    const s   = Math.ceil(rem / 1000);
+    const mm  = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss  = String(s % 60).padStart(2, '0');
+    $('tickCountdown').textContent = `${mm}:${ss}`;
+    $('tickFill').style.width      = ((1 - rem / 62000) * 100).toFixed(1) + '%';
+  }
+
+  // 自动扫描倒计时（header右上角）
+  if (RT.running && RT.lastScanAt > 0) {
+    const rem = Math.max(0, SCAN_INTERVAL_MS - (Date.now() - RT.lastScanAt));
+    const s   = Math.ceil(rem / 1000);
+    const mm  = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss  = String(s % 60).padStart(2, '0');
+    $('scanCountdownVal').textContent = `${mm}:${ss}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// 回测（调用真实币安K线）
+// ═══════════════════════════════════════════════════
+async function fetchKlinesForBt(symbol, startMs, endMs) {
+  const all = [];
+  let cur   = startMs;
+  while (cur < endMs) {
+    const url = `/api/v3/klines?symbol=${symbol}&interval=1m`
+      + `&startTime=${cur}&endTime=${endMs}&limit=1000`;
+    const batch = await apiFetch(url);
+    if (!batch.length) break;
+    all.push(...batch);
+    cur = batch[batch.length - 1][0] + 1;
+    if (batch.length < 1000) break;
+    await sleep(250);
+  }
+  return all.map((k, i) => ({
+    open:       parseFloat(k[1]), high: parseFloat(k[2]),
+    low:        parseFloat(k[3]), close: parseFloat(k[4]),
+    prev_close: i > 0 ? parseFloat(all[i-1][4]) : parseFloat(k[1]),
+    close_time: new Date(k[6]).toLocaleTimeString('zh-CN', {hour12:false}),
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
   }));
 }
 
 function runBtStrategy(symbol, candles, cfg) {
+<<<<<<< HEAD
   const trades=[]; let pos=null, ords=[], cooldown=0;
   const equity=[cfg.position_size_usdt*10];
+=======
+  const trades = []; let pos = null, ords = [], cooldown = 0;
+  const equity = [cfg.size * 10];
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
   for (const c of candles) {
     if (ords.length && !pos) {
       const filled = ords.filter(o => c.low <= o.price);
       if (filled.length) {
+<<<<<<< HEAD
         const tc=filled.reduce((s,o)=>s+o.price*o.qty,0);
         const tq=filled.reduce((s,o)=>s+o.qty,0);
         pos={entry:tc/tq,qty:tq,sl:(tc/tq)*(1-cfg.stop_loss_pct/100),
              peak:tc/tq,had_green:false,hold:0};
+=======
+        const tc = filled.reduce((s,o) => s+o.price*o.qty, 0);
+        const tq = filled.reduce((s,o) => s+o.qty, 0);
+        pos = { entry: tc/tq, qty: tq, sl: (tc/tq)*(1-cfg.sl_pct/100),
+                peak: tc/tq, had_green: false, hold: 0 };
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
       }
       ords=[];
     }
     if (pos) {
       pos.hold++;
+<<<<<<< HEAD
       if (c.high>pos.peak) pos.peak=c.high;
       let exit=null;
       if (c.low<=pos.sl) exit={price:pos.sl,reason:'止损'};
@@ -878,6 +1518,42 @@ function runBtStrategy(symbol, candles, cfg) {
       ords=([cfg.order_pct_1,cfg.order_pct_2,cfg.order_pct_3]).map((pct,i)=>({
         price:c.close*(1-pct/100),
         qty:(cfg.position_size_usdt*[cfg.order_ratio_1,cfg.order_ratio_2,cfg.order_ratio_3][i])/(c.close*(1-pct/100)),
+=======
+      if (c.high > pos.peak) pos.peak = c.high;
+      let exit = null;
+      if (c.low <= pos.sl) exit = { price: pos.sl, reason: '止损' };
+      else if (pos.hold >= cfg.max_hold) exit = { price: c.close, reason: '超时出局' };
+      else if ((c.high-pos.entry)/pos.entry*100 >= cfg.tp_pct) {
+        pos.sl = pos.entry;
+        if (c.close >= pos.entry*(1+cfg.tp_pct/100))
+          exit = { price: c.close, reason: `止盈${cfg.tp_pct}%` };
+      }
+      if (!exit) {
+        if (c.close > pos.entry) { pos.had_green = true; pos.sl = Math.max(pos.sl, pos.entry); }
+        if (pos.had_green && c.close < c.open &&
+            (c.open-c.close)/c.open*100 >= cfg.trail_red)
+          exit = { price: c.close, reason: '回弹后阴线' };
+      }
+      if (exit) {
+        const pp = (exit.price-pos.entry)/pos.entry*100;
+        const pu = (exit.price-pos.entry)*pos.qty;
+        trades.push({ symbol, entry_price:pos.entry, exit_price:exit.price,
+          entry_time:c.close_time, exit_time:c.close_time, exit_reason:exit.reason,
+          hold_candles:pos.hold, pnl_pct:pp, pnl_usdt:pu, status:'closed' });
+        equity.push(equity[equity.length-1] + pu);
+        cooldown = cfg.cooldown; pos = null;
+      }
+      continue;
+    }
+    if (cooldown > 0) { cooldown--; continue; }
+    // 挂单条件（放宽）：阴线 + 高位保护
+    const _dh = c.day_high || 0;
+    const _ok = c.close < c.open && (_dh === 0 || c.close >= _dh * (cfg.high_price_ratio||0.8));
+    if (_ok) {
+      ords = cfg.order_pct.map((pct,i) => ({
+        price: c.low*(1-pct/100),
+        qty:   (cfg.size*cfg.order_ratio[i])/(c.low*(1-pct/100)),
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
       }));
     }
   }
@@ -886,6 +1562,7 @@ function runBtStrategy(symbol, candles, cfg) {
 
 async function runBacktest() {
   const btn = $('btnBt');
+<<<<<<< HEAD
   btn.disabled=true; btn.textContent='回测中...';
   const symStr=$('bt-syms').value.trim();
   const days=parseInt($('bt-days').value);
@@ -918,10 +1595,45 @@ async function runBacktest() {
     const sym=symbols[i];
     $('btProgressLabel').textContent=`回测 ${sym} (${i+1}/${symbols.length})`;
     $('btFill').style.width=((i+1)/symbols.length*100)+'%';
+=======
+  btn.disabled = true; btn.textContent = '回测中...';
+  const symStr = $('bt-syms').value.trim();
+  const days   = parseInt($('bt-days').value);
+  const gain   = parseFloat($('bt-gain').value) || 30;
+  $('btProgress').style.display  = 'block';
+  $('btMetrics').style.display   = 'none';
+  $('btCharts').style.display    = 'none';
+  $('btTradeCard').style.display = 'none';
+
+  let symbols = symStr
+    ? symStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
+  if (!symbols.length) {
+    $('btProgressLabel').textContent = '筛选涨幅榜...';
+    try {
+      const g = await getTopGainers();
+      symbols = g.slice(0,5).map(x => x.symbol);
+    } catch(e) { symbols = []; }
+  }
+  if (!symbols.length) {
+    $('btProgressLabel').textContent = '未找到符合条件的币种';
+    btn.disabled = false; btn.textContent = '▶ 开始回测'; return;
+  }
+
+  const endMs = Date.now(), startMs = endMs - days * 86400000;
+  const cfg = PS.cfg; const allTrades = []; let allEquity = [cfg.size*10];
+  const reasonMap = {};
+
+  for (let i = 0; i < symbols.length; i++) {
+    const sym = symbols[i];
+    $('btProgressLabel').textContent = `回测 ${sym} (${i+1}/${symbols.length})`;
+    $('btFill').style.width = ((i+1)/symbols.length*100) + '%';
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
     try {
       const candles=await fetchKlinesForBt(sym,startMs,endMs);
       const {trades,equity}=runBtStrategy(sym,candles,cfg);
       allTrades.push(...trades);
+<<<<<<< HEAD
       for (let j=1;j<equity.length;j++)
         allEquity.push(allEquity[allEquity.length-1]+(equity[j]-equity[j-1]));
       trades.forEach(t=>{reasonMap[t.exit_reason]=(reasonMap[t.exit_reason]||0)+1;});
@@ -976,6 +1688,74 @@ async function runBacktest() {
       <td>${fmtP(t.entry_price)}</td><td>${fmtP(t.exit_price||0)}</td>
       <td class="${t.pnl_pct>=0?'pos':'neg'}">${t.pnl_pct>=0?'+':''}${fmt(t.pnl_pct)}%</td>
       <td class="${t.pnl_usdt>=0?'pos':'neg'}">${t.pnl_usdt>=0?'+':''}${fmt(t.pnl_usdt)}</td>
+=======
+      for (let j = 1; j < equity.length; j++) {
+        allEquity.push(allEquity[allEquity.length-1] + (equity[j]-equity[j-1]));
+      }
+      trades.forEach(t => {
+        reasonMap[t.exit_reason] = (reasonMap[t.exit_reason]||0) + 1;
+      });
+    } catch(e) { addLog('BT', `${sym}: ${e.message}`, 'exit'); }
+    await sleep(120);
+  }
+
+  $('btProgress').style.display = 'none';
+  const closed = allTrades.filter(t => t.status === 'closed');
+  const wins   = closed.filter(t => t.pnl_pct > 0);
+  const totalPnl = closed.reduce((s,t) => s+t.pnl_usdt, 0);
+  const avgHold  = closed.length ? closed.reduce((s,t) => s+t.hold_candles, 0)/closed.length : 0;
+
+  $('bt-pnl').textContent  = (totalPnl >= 0 ? '+' : '') + fmt(totalPnl);
+  $('bt-pnl').className    = 'metric-value ' + (totalPnl >= 0 ? 'pos' : 'neg');
+  $('bt-wr').textContent   = closed.length ? fmt(wins.length/closed.length*100,1)+'%' : '--%';
+  $('bt-cnt').textContent  = closed.length;
+  $('bt-hold').textContent = fmt(avgHold,1);
+  $('btMetrics').style.display  = 'grid';
+  $('btCharts').style.display   = 'grid';
+  $('btTradeCard').style.display = 'block';
+
+  if (RT.btEquity) RT.btEquity.destroy();
+  RT.btEquity = new Chart($('equityCanvas').getContext('2d'), {
+    type:'line',
+    data:{ labels:allEquity.map((_,i)=>i), datasets:[{
+      data:allEquity, borderColor:'#22d3a0', borderWidth:1.5,
+      pointRadius:0, fill:true, backgroundColor:'rgba(34,211,160,.07)', tension:.3,
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{display:false},
+        y:{grid:{color:'rgba(255,255,255,.05)'},
+           ticks:{color:'#64748b',font:{family:"'JetBrains Mono'",size:11}}}
+      }
+    }
+  });
+
+  if (RT.btReason) RT.btReason.destroy();
+  RT.btReason = new Chart($('reasonCanvas').getContext('2d'), {
+    type:'doughnut',
+    data:{
+      labels:Object.keys(reasonMap),
+      datasets:[{ data:Object.values(reasonMap),
+        backgroundColor:['#22d3a0','#f43f5e','#fbbf24','#38bdf8','#a78bfa'],
+        borderWidth:0 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{
+        color:'#94a3b8',font:{size:11,family:"'JetBrains Mono'"},boxWidth:10
+      }}}
+    }
+  });
+
+  $('btTradeBody').innerHTML = closed.slice(0,120).map(t => `
+    <tr>
+      <td class="neu">${t.entry_time}</td>
+      <td style="font-weight:600">${t.symbol}</td>
+      <td>${fmtP(t.entry_price)}</td><td>${fmtP(t.exit_price)}</td>
+      <td class="${t.pnl_pct >= 0 ? 'pos':'neg'}">${t.pnl_pct>=0?'+':''}${fmt(t.pnl_pct)}%</td>
+      <td class="${t.pnl_usdt >= 0 ? 'pos':'neg'}">${t.pnl_usdt>=0?'+':''}${fmt(t.pnl_usdt)}</td>
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
       <td class="neu">${t.hold_candles}</td>
       <td class="neu">${t.exit_reason}</td>
     </tr>`).join('');
@@ -984,6 +1764,7 @@ async function runBacktest() {
 }
 
 // ═══════════════════════════════════════════════════
+<<<<<<< HEAD
 // 配置页（从后端读取，保存到后端）
 // ═══════════════════════════════════════════════════
 async function loadConfig() {
@@ -1056,10 +1837,57 @@ function addLocalLog(sym, msg, type='') {
   panel.insertBefore(div, panel.firstChild);
 }
 
+=======
+// 配置
+// ═══════════════════════════════════════════════════
+function saveCfg() {
+  PS.cfg = {
+    min_gain:    parseFloat($('c-gain').value),
+    min_vol:     parseFloat($('c-vol').value),
+    high_price_ratio: parseFloat($('c-hpr').value) / 100,
+    order_pct:   [$('c-p1'),$('c-p2'),$('c-p3')].map(e => parseFloat(e.value)),
+    order_ratio: [$('c-r1'),$('c-r2'),$('c-r3')].map(e => parseFloat(e.value)),
+    sl_pct:      parseFloat($('c-sl').value),
+    tp_pct:      parseFloat($('c-tp').value),
+    max_hold:    parseInt($('c-hold').value),
+    trail_red:   parseFloat($('c-trail').value),
+    size:        parseFloat($('c-size').value),
+    cooldown:    parseInt($('c-cool').value),
+  };
+  savePS();
+  const ok = $('cfg-ok');
+  ok.style.display = 'inline';
+  setTimeout(() => ok.style.display = 'none', 2000);
+}
+
+function resetCfg() {
+  const d = defaultCfg();
+  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-hpr',(d.high_price_ratio||0.8)*100],
+   ['c-p1',d.order_pct[0]],['c-p2',d.order_pct[1]],['c-p3',d.order_pct[2]],
+   ['c-r1',d.order_ratio[0]],['c-r2',d.order_ratio[1]],['c-r3',d.order_ratio[2]],
+   ['c-sl',d.sl_pct],['c-tp',d.tp_pct],['c-hold',d.max_hold],
+   ['c-trail',d.trail_red],['c-size',d.size],['c-cool',d.cooldown],
+  ].forEach(([id,v]) => $(id).value = v);
+  PS.cfg = d;
+  savePS();
+}
+
+function applyStoredCfgToUI() {
+  const d = PS.cfg;
+  [['c-gain',d.min_gain],['c-vol',d.min_vol],['c-hpr',(d.high_price_ratio||0.8)*100],
+   ['c-p1',d.order_pct[0]],['c-p2',d.order_pct[1]],['c-p3',d.order_pct[2]],
+   ['c-r1',d.order_ratio[0]],['c-r2',d.order_ratio[1]],['c-r3',d.order_ratio[2]],
+   ['c-sl',d.sl_pct],['c-tp',d.tp_pct],['c-hold',d.max_hold],
+   ['c-trail',d.trail_red||1.0],['c-size',d.size],['c-cool',d.cooldown],
+  ].forEach(([id,v]) => { if($(id)) $(id).value = v; });
+}
+
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
 // ═══════════════════════════════════════════════════
 // Tab 切换
 // ═══════════════════════════════════════════════════
 function switchTab(name) {
+<<<<<<< HEAD
   document.querySelectorAll('.tab').forEach((t,i)=>{
     t.classList.toggle('active',['paper','backtest','config'][i]===name);
   });
@@ -1079,6 +1907,49 @@ setInterval(()=>$('clock').textContent=nowT(), 1000);
 // ═══════════════════════════════════════════════════
 startPolling();
 loadTrades();
+=======
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['paper','backtest','config'][i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  $('pane-'+name).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════
+// 初始化（页面加载时恢复状态）
+// ═══════════════════════════════════════════════════
+function init() {
+  // 恢复配置到UI
+  applyStoredCfgToUI();
+
+  // 恢复UI数据
+  updateMetrics();
+  renderTradeTable();
+  renderPnlBars();
+  renderOrderSlots();
+
+  $('logPanel').innerHTML =
+    '<div class="ll"><span class="lt">--:--</span><span class="ls">SYS</span>'
+    + '<span class="lm system">状态已从本地恢复</span></div>';
+
+  if (PS.trades.length)
+    addLog('SYS', `恢复 ${PS.trades.length} 笔历史交易，总盈亏 ${PS.pnlTotal >= 0 ? '+' : ''}${fmt(PS.pnlTotal)} USDT`, 'system');
+
+  if (PS.symbols.length)
+    addLog('SYS', `恢复监控列表: ${PS.symbols.join(', ')}`, 'system');
+
+  // 时钟 + 倒计时UI
+  setInterval(() => { $('clock').textContent = nowT(); updateCountdownUI(); }, 1000);
+
+  // 如果上次关闭时在运行，自动恢复
+  if (PS.wasRunning) {
+    addLog('SYS', '检测到上次未停止，自动恢复运行', 'entry');
+    startPaper();
+  }
+}
+
+init();
+>>>>>>> 32cf8411315c4a387fe1d2750ccdce5542e9f403
 </script>
 </body>
 </html>
