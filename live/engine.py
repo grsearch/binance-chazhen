@@ -178,7 +178,12 @@ class LiveEngine:
                 try:
                     self._process_symbol(sym)
                 except Exception as e:
-                    self._log(sym, f"处理异常: {e}")
+                    import traceback
+                    tb = traceback.format_exc()
+                    # 只打印最后两行（文件名+行号+错误），避免日志太长
+                    lines = [l.strip() for l in tb.strip().splitlines() if l.strip()]
+                    short = " | ".join(lines[-3:])
+                    self._log(sym, f"处理异常: {e} | {short}")
                 time.sleep(0.3)
 
             # 等待下一分钟整点
@@ -251,6 +256,19 @@ class LiveEngine:
         with self._lock:
             pos    = self.state["positions"].get(symbol)
             orders = self.state["orders"].get(symbol, [])
+
+        # 防御：pos/orders 类型错误时直接清除，避免 float not subscriptable
+        if pos is not None and not isinstance(pos, dict):
+            self._log(symbol, f"持仓数据类型异常({type(pos).__name__})，已清除")
+            with self._lock:
+                del self.state["positions"][symbol]
+                save_state(self.state)
+            pos = None
+        if not isinstance(orders, list):
+            with self._lock:
+                self.state["orders"][symbol] = []
+                save_state(self.state)
+            orders = []
 
         # 1. 有持仓 → 检查出场
         if pos:
@@ -347,6 +365,19 @@ class LiveEngine:
         cfg   = self.cfg
         close = candle["close"]
         total = cfg["position_size_usdt"]
+
+        # 实盘：下单前检查余额，不足则跳过，避免 -2010 错误
+        if mode == "live" and self.client:
+            try:
+                available = self.client.get_usdt_balance()
+                if available < total * 0.5:  # 至少要有一半仓位的余额
+                    self._log(symbol,
+                        f"余额不足跳过挂单 可用={available:.2f} 需要≥{total*0.5:.2f} USDT")
+                    return
+            except Exception as e:
+                self._log(symbol, f"余额查询失败: {e}")
+                return
+
         slots = [
             (close * (1 - cfg["order_pct_1"]/100), cfg["order_ratio_1"]),
             (close * (1 - cfg["order_pct_2"]/100), cfg["order_ratio_2"]),
