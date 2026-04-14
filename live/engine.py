@@ -16,7 +16,10 @@ from store import (
     load_config, save_config, load_state, save_state,
     load_trades, append_trade, append_log, read_recent_logs,
 )
+<<<<<<< HEAD
 from ws_monitor import PositionMonitorManager
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +40,11 @@ class LiveEngine:
         self._stop_event = threading.Event()
         # 内存日志（最近200条，供API快速返回）
         self._mem_logs: list[dict] = read_recent_logs(200)
+<<<<<<< HEAD
         # WebSocket秒级持仓监控
         self._ws_mgr = PositionMonitorManager()
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
     def _make_client(self) -> Optional[BinanceClient]:
         key    = self.cfg.get("api_key", "")
@@ -104,7 +110,10 @@ class LiveEngine:
 
     def stop(self) -> dict:
         self._stop_event.set()
+<<<<<<< HEAD
         self._ws_mgr.stop_all()
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
         with self._lock:
             self.state["running"] = False
             save_state(self.state)
@@ -547,6 +556,7 @@ class LiveEngine:
             self.state["positions"][symbol] = pos
             save_state(self.state)
         self._log(symbol,
+<<<<<<< HEAD
             f"入场 {len(filled)}档成交 均价={avg:.6f} "
             f"WS止损={self.cfg.get('ws_stop_loss_pct',1.5)}% "
             f"WS止盈={self.cfg.get('ws_take_profit_pct',2.5)}% "
@@ -563,6 +573,9 @@ class LiveEngine:
             mode         = mode,
             rest_price_fn= self._get_current_price,
         )
+=======
+            f"入场 {len(filled)}档成交 均价={avg:.6f} 止损={pos['stop_loss']:.6f}")
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 
     # ── 出场判断 ─────────────────────────────────────
 
@@ -658,6 +671,7 @@ class LiveEngine:
             f"出场:{reason} 均价={exit_price:.6f} "
             f"PnL={pnl_pct:+.2f}% ({pnl_usdt:+.4f}U)")
 
+<<<<<<< HEAD
     # ── WebSocket出场回调 ───────────────────────────────
 
     def _ws_on_exit(self, symbol: str, exit_price: float, reason: str,
@@ -723,6 +737,8 @@ class LiveEngine:
         except Exception:
             return 0.0
 
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
     # ── 撤单 ─────────────────────────────────────────
 
     def _cancel_pending_orders(self, symbol: str, orders: list, mode: str):

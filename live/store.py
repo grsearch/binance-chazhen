@@ -65,10 +65,13 @@ DEFAULT_CONFIG = {
     "api_key":           "",
     "api_secret":        "",
     "max_open_positions": 3,        # 同时最多持仓币种数
+<<<<<<< HEAD
     # WebSocket秒级持仓参数
     "ws_stop_loss_pct":    1.5,     # 止损%（相对买入均价）
     "ws_take_profit_pct":  2.5,     # 止盈%
     "ws_max_hold_seconds": 5,       # 最大持仓秒数
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
 }
 
 

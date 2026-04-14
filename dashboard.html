@@ -364,6 +364,7 @@ header{
       <div class="field"><label>最大同时持仓数</label><input id="c-maxpos" value="3"></div>
     </div>
 
+<<<<<<< HEAD
     <div class="card-title">秒级出场参数（WebSocket 实时监控）</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6">
       买入成交后立即启动 WebSocket 订阅实时价格，按秒触发出场，不等1分钟K线收盘。
@@ -374,6 +375,8 @@ header{
       <div class="field"><label>最大持仓秒数</label><input id="c-ws-sec" value="5"></div>
     </div>
 
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
     <div class="card-title">实盘设置</div>
     <div class="cfg-grid" style="margin-bottom:16px">
       <div class="field"><label>运行模式</label>
@@ -852,9 +855,12 @@ async function loadConfig() {
     $('c-size').value  = cfg.position_size_usdt   ?? 100;
     $('c-cool').value  = cfg.cooldown_candles     ?? 2;
     $('c-maxpos').value= cfg.max_open_positions   ?? 3;
+<<<<<<< HEAD
     $('c-ws-sl').value = cfg.ws_stop_loss_pct    ?? 1.5;
     $('c-ws-tp').value = cfg.ws_take_profit_pct  ?? 2.5;
     $('c-ws-sec').value= cfg.ws_max_hold_seconds ?? 5;
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
     $('c-mode').value  = cfg.mode                ?? 'paper';
     $('c-key').value   = cfg.api_key             ?? '';
     $('c-secret').value= cfg.api_secret          ?? '';
@@ -879,9 +885,12 @@ async function saveCfg() {
     position_size_usdt:   parseFloat($('c-size').value),
     cooldown_candles:     parseInt($('c-cool').value),
     max_open_positions:   parseInt($('c-maxpos').value),
+<<<<<<< HEAD
     ws_stop_loss_pct:     parseFloat($('c-ws-sl').value),
     ws_take_profit_pct:   parseFloat($('c-ws-tp').value),
     ws_max_hold_seconds:  parseInt($('c-ws-sec').value),
+=======
+>>>>>>> ca289074b107051ee3d13396f713fcbb13b232a0
     mode:                 $('c-mode').value,
     api_key:              $('c-key').value.trim(),
     api_secret:           $('c-secret').value.trim(),
