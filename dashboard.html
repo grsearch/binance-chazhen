@@ -415,7 +415,11 @@ header{
 // ═══ 后端地址配置 ═══════════════════════════════════
 // 通过 http://服务器IP:8888 访问时保持空字符串
 // 直接打开 HTML 文件时改为: const API_BASE = 'http://你的服务器IP:8888';
+<<<<<<< HEAD
 const API_BASE = '';
+=======
+const API_BASE = '43.165.167.85';
+>>>>>>> 1f43c02466255839cff1f8d8cb8e7baeec54ebb2
 
 async function api(path, method='GET', body=null) {
   const opts = { method, headers:{'Content-Type':'application/json'} };
