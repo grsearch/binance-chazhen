@@ -416,9 +416,11 @@ class LiveEngine:
             new_orders.append(order_rec)
 
         if new_orders:
-            prices = " / ".join(f"{o['price']:.6f}(-{p[0]}%)"
-                                for o, p in zip(new_orders,
-                                [cfg['order_pct_1'], cfg['order_pct_2'], cfg['order_pct_3']]))
+            prices = " / ".join(
+                f"{o['price']:.6f}(-{p}%)"
+                for o, p in zip(new_orders,
+                    [cfg['order_pct_1'], cfg['order_pct_2'], cfg['order_pct_3']])
+            )
             self._log(symbol, f"挂单 收盘={close:.6f} → {prices}")
             with self._lock:
                 self.state["orders"][symbol] = new_orders
