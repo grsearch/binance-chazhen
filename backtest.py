@@ -23,7 +23,7 @@ def fetch_url(url: str) -> dict | list:
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 
-def get_top_gainers(min_gain: float = 30.0, min_volume: float = 500_000,
+def get_top_gainers(min_gain: float = 50.0, min_volume: float = 500_000,
                     limit: int = 10) -> list[dict]:
     """获取24h涨幅排行"""
     data = fetch_url(f"{BASE}/api/v3/ticker/24hr")
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="插针策略回测")
     parser.add_argument("--symbol",  default=None,  help="指定币种如 BTCUSDT，不填则自动筛选")
     parser.add_argument("--days",    type=int, default=3, help="回测天数")
-    parser.add_argument("--gain",    type=float, default=30.0, help="最低24h涨幅%")
+    parser.add_argument("--gain",    type=float, default=50.0, help="最低24h涨幅%")
     parser.add_argument("--output",  default="backtest_result.json", help="输出文件")
     args = parser.parse_args()
 

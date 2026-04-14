@@ -1,0 +1,16 @@
+[Unit]
+Description=Spike Strategy Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/spike-strategy/live
+ExecStart=/usr/bin/python3 /root/spike-strategy/live/server.py --port 8888
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
