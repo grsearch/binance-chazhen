@@ -140,14 +140,58 @@ class LiveEngine:
         return {"ok": True}
 
     def remove_symbol(self, symbol: str) -> dict:
+        """
+        安全移除监控币种：
+        1. 有持仓 → 先市价卖出，再移除
+        2. 有挂单 → 先撤单，再移除
+        3. 无持仓无挂单 → 直接移除
+        """
         symbol = symbol.upper()
+        mode   = self.cfg.get("mode", "paper")
+
+        # 处理持仓：市价卖出
+        pos = self.state["positions"].get(symbol)
+        if pos:
+            self._log(symbol, f"移除前市价卖出 qty={pos['qty']}")
+            if mode == "live" and self.client:
+                try:
+                    self.client.place_market_sell(symbol, pos["qty"])
+                except Exception as e:
+                    from binance_client import BinanceAPIError
+                    msg = f"[币安{e.binance_code}]: {e.msg}" if isinstance(e, BinanceAPIError) else str(e)
+                    self._log(symbol, f"卖出失败: {msg}")
+                    return {"ok": False, "msg": f"卖出失败: {msg}"}
+            # 记录交易并清除持仓
+            pnl_usdt = 0.0
+            trade = {
+                "symbol": symbol, "entry_price": pos["entry_price"],
+                "exit_price": pos.get("current_price", pos["entry_price"]),
+                "qty": pos["qty"], "entry_time": pos.get("entry_time",""),
+                "exit_time": "手动移除", "exit_reason": "手动移除",
+                "hold_candles": pos.get("hold", 0),
+                "pnl_pct": 0.0, "pnl_usdt": pnl_usdt,
+                "status": "closed", "mode": mode,
+            }
+            append_trade(trade)
+            with self._lock:
+                del self.state["positions"][symbol]
+                save_state(self.state)
+
+        # 处理挂单：撤单
+        ords = self.state["orders"].get(symbol, [])
+        if ords:
+            self._log(symbol, f"移除前撤销{len(ords)}笔挂单")
+            self._cancel_pending_orders(symbol, ords, mode)
+            with self._lock:
+                self.state["orders"][symbol] = []
+                save_state(self.state)
+
+        # 从监控列表移除
         with self._lock:
-            if symbol in self.state["positions"]:
-                return {"ok": False, "msg": f"{symbol} 有持仓，不能移除"}
             if symbol in self.state["symbols"]:
                 self.state["symbols"].remove(symbol)
                 save_state(self.state)
-        self._log("SYS", f"移除监控: {symbol}")
+        self._log("SYS", f"已移除监控: {symbol}")
         return {"ok": True}
 
     # ── 主循环 ────────────────────────────────────────
@@ -218,12 +262,36 @@ class LiveEngine:
             gainers = gainers[:15]
 
             with self._lock:
-                # 新增
-                added = [s for s in gainers if s not in self.state["symbols"]]
-                # 移除不再符合条件的（保留有持仓的）
-                keep = [s for s in self.state["symbols"]
-                        if s in gainers or s in self.state["positions"]]
-                self.state["symbols"] = keep
+                added   = [s for s in gainers if s not in self.state["symbols"]]
+                # 找出需要移除的：不在新榜单、无持仓、无挂单
+                to_remove = [
+                    s for s in self.state["symbols"]
+                    if s not in gainers
+                    and s not in self.state["positions"]
+                    and not self.state["orders"].get(s)
+                ]
+                # 有挂单但不在榜单的：撤单后再移除
+                to_cancel = [
+                    s for s in self.state["symbols"]
+                    if s not in gainers
+                    and s not in self.state["positions"]
+                    and self.state["orders"].get(s)
+                ]
+
+            # 撤单（在锁外执行，避免死锁）
+            mode = self.cfg.get("mode", "paper")
+            for s in to_cancel:
+                self._log(s, "不再符合条件，撤销挂单后移除监控")
+                ords = self.state["orders"].get(s, [])
+                self._cancel_pending_orders(s, ords, mode)
+                with self._lock:
+                    self.state["orders"][s] = []
+                to_remove.append(s)
+
+            with self._lock:
+                for s in to_remove:
+                    if s in self.state["symbols"]:
+                        self.state["symbols"].remove(s)
                 for s in added:
                     if s not in self.state["symbols"]:
                         self.state["symbols"].append(s)
