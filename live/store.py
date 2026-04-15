@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
     "min_gain_24h":      30.0,
     "min_volume_usdt":   500000.0,
     "high_price_ratio":  0.80,
+    "min_candle_drop_pct": 0.0,
     "order_pct_1":       4.0,
     "order_pct_2":       6.0,
     "order_pct_3":       9.0,
@@ -66,9 +67,9 @@ DEFAULT_CONFIG = {
     "api_secret":        "",
     "max_open_positions": 3,        # 同时最多持仓币种数
     # WebSocket秒级持仓参数
-    "ws_stop_loss_pct":    1.5,     # 止损%（相对买入均价）
-    "ws_take_profit_pct":  2.5,     # 止盈%
-    "ws_max_hold_seconds": 5,       # 最大持仓秒数
+    "ws_stop_loss_pct":       1.5,     # 止损%（相对买入均价）
+    "ws_first_check_seconds": 3,       # 第N秒检查：有利润就卖
+    "ws_force_exit_seconds":  6,       # 第N秒强制出场（不论盈亏）
 }
 
 
