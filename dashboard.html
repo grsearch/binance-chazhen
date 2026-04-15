@@ -324,6 +324,137 @@ header{
       </table>
     </div>
   </div>
+
+  <!-- 自动优化 -->
+  <div class="card" style="margin-top:18px">
+    <div class="card-title">自动参数优化</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+      对当前监控币种遍历参数组合，找出<b style="color:var(--green)">总盈亏最大</b>的配置。
+      完成后可一键应用到策略配置。
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;margin-bottom:16px">
+      <div class="field">
+        <label>回测天数</label>
+        <select id="opt-days" style="width:100%">
+          <option value="1">1天（快速）</option>
+          <option value="3" selected>3天（推荐）</option>
+          <option value="7">7天（精准）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>搜索组数上限</label>
+        <select id="opt-runs" style="width:100%">
+          <option value="50">50组（约3分钟）</option>
+          <option value="120" selected>120组（约8分钟）</option>
+          <option value="300">300组（约20分钟）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>最少交易次数</label>
+        <input id="opt-min-trades" value="3" style="width:100%"
+          title="结果少于此次数的参数组合视为无效（样本太少不可信）">
+      </div>
+    </div>
+
+    <!-- 参数范围 -->
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;letter-spacing:.5px;text-transform:uppercase">参数搜索范围</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;font-size:12px">
+      <div class="field"><label>止损% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-sl-min" value="1" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-sl-max" value="4" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-sl-step" value="1" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>止盈% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-tp-min" value="1.5" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-tp-max" value="5" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-tp-step" value="0.5" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>持仓秒数 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-sec-min" value="3" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-sec-max" value="15" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-sec-step" value="3" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>第1档跌幅% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-p1-min" value="2" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-p1-max" value="6" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-p1-step" value="1" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>第2档跌幅% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-p2-min" value="5" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-p2-max" value="9" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-p2-step" value="1" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>第3档跌幅% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-p3-min" value="8" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-p3-max" value="12" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-p3-step" value="2" style="width:50px">
+        </div>
+      </div>
+      <div class="field"><label>阴线最小跌幅% 范围</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="opt-drop-min" value="0" style="width:60px">
+          <span style="color:var(--muted)">~</span>
+          <input id="opt-drop-max" value="2" style="width:60px">
+          <span style="color:var(--muted)">步长</span>
+          <input id="opt-drop-step" value="0.5" style="width:50px">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <button class="btn btn-primary" onclick="runOptimize()" id="btnOpt">▶ 开始优化</button>
+      <span id="opt-status" style="font-size:12px;color:var(--muted)">尚未运行</span>
+    </div>
+
+    <!-- 进度 -->
+    <div id="optProgress" style="display:none;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:5px" id="optProgressLabel">准备中...</div>
+      <div class="progress-bar"><div class="progress-fill" id="optFill"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px" id="optProgressSub"></div>
+    </div>
+
+    <!-- 最优结果展示 -->
+    <div id="optResult" style="display:none">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">最优参数组合 TOP 5</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="optTable">
+          <thead>
+            <tr>
+              <th>#</th><th>总盈亏</th><th>胜率</th><th>交易数</th>
+              <th>止损%</th><th>止盈%</th><th>持仓秒</th>
+              <th>档1%</th><th>档2%</th><th>档3%</th><th>阴线跌幅≥</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="optTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -337,6 +468,7 @@ header{
       <div class="field"><label>24H最低涨幅 (%)</label><input id="c-gain" value="30"></div>
       <div class="field"><label>最低成交量 (USDT)</label><input id="c-vol" value="500000"></div>
       <div class="field"><label>高位保护 (当日最高×%)</label><input id="c-hpr" value="80"></div>
+      <div class="field"><label>阴线最小跌幅% (0=不限)</label><input id="c-drop" value="0" title="K线阴线跌幅须≥此值才挂单"></div>
     </div>
 
     <div class="card-title">挂单参数（基于K线收盘价向下）</div>
@@ -741,7 +873,8 @@ function runBtStrategy(symbol, candles, cfg) {
       continue;
     }
     if (cd>0){cd--;continue;}
-    if (c.close<c.open)
+    const _drop=(c.open-c.close)/c.open*100;
+    if (c.close<c.open && _drop>=(cfg.min_candle_drop_pct||0))
       ords=([cfg.order_pct_1||4,cfg.order_pct_2||6,cfg.order_pct_3||9]).map((pct,i)=>({
         price:c.close*(1-pct/100),
         qty:((cfg.position_size_usdt||100)*[cfg.order_ratio_1||.4,cfg.order_ratio_2||.35,cfg.order_ratio_3||.25][i])/(c.close*(1-pct/100)),
@@ -852,6 +985,7 @@ async function loadConfig() {
     $('c-gain').value  = cfg.min_gain_24h        ?? 30;
     $('c-vol').value   = cfg.min_volume_usdt      ?? 500000;
     $('c-hpr').value   = Math.round((cfg.high_price_ratio??0.8)*100);
+    $('c-drop').value  = cfg.min_candle_drop_pct ?? 0;
     $('c-p1').value    = cfg.order_pct_1          ?? 4;
     $('c-p2').value    = cfg.order_pct_2          ?? 6;
     $('c-p3').value    = cfg.order_pct_3          ?? 9;
@@ -879,6 +1013,7 @@ async function saveCfg() {
     min_gain_24h:         parseFloat($('c-gain').value),
     min_volume_usdt:      parseFloat($('c-vol').value),
     high_price_ratio:     parseFloat($('c-hpr').value)/100,
+    min_candle_drop_pct:  parseFloat($('c-drop').value),
     order_pct_1:          parseFloat($('c-p1').value),
     order_pct_2:          parseFloat($('c-p2').value),
     order_pct_3:          parseFloat($('c-p3').value),
@@ -908,6 +1043,251 @@ async function saveCfg() {
       await pollStatus(); // 刷新 header 上的 mode tag
     }
   } catch(e) { alert('保存失败: '+e.message); }
+}
+
+// ═══════════════════════════════════════════════════
+// 自动参数优化
+// ═══════════════════════════════════════════════════
+
+function rangeArr(min, max, step) {
+  // 生成从min到max步长为step的数组，最多10个值防止爆炸
+  const arr = [];
+  for (let v = min; v <= max + 1e-9; v = Math.round((v + step) * 1e6) / 1e6) {
+    arr.push(Math.round(v * 100) / 100);
+  }
+  return arr.length <= 10 ? arr : arr.filter((_,i) => i % Math.ceil(arr.length/10) === 0).slice(0,10);
+}
+
+function buildParamGrid(maxRuns) {
+  const g = n => id => parseFloat($(id+'-'+n).value);
+  const mn=g('min'), mx=g('max'), st=g('step');
+  const slArr  = rangeArr(mn('opt-sl'),  mx('opt-sl'),  st('opt-sl'));
+  const tpArr  = rangeArr(mn('opt-tp'),  mx('opt-tp'),  st('opt-tp'));
+  const secArr = rangeArr(mn('opt-sec'), mx('opt-sec'), st('opt-sec')).map(Math.round);
+  const p1Arr  = rangeArr(mn('opt-p1'),  mx('opt-p1'),  st('opt-p1'));
+  const p2Arr  = rangeArr(mn('opt-p2'),  mx('opt-p2'),  st('opt-p2'));
+  const p3Arr   = rangeArr(mn('opt-p3'),   mx('opt-p3'),   st('opt-p3'));
+  const dropArr = rangeArr(mn('opt-drop'), mx('opt-drop'), st('opt-drop'));
+
+  // 全组合
+  const all = [];
+  for (const sl of slArr)
+  for (const tp of tpArr)
+  for (const sec of secArr)
+  for (const p1 of p1Arr)
+  for (const p2 of p2Arr)
+  for (const p3 of p3Arr)
+  for (const drop of dropArr) {
+    if (p1 >= p2 || p2 >= p3) continue;  // 跌幅档位必须递增
+    if (tp <= sl) continue;              // 止盈必须大于止损
+    all.push({sl, tp, sec, p1, p2, p3, drop});
+  }
+
+  // 超过上限时随机采样（保留多样性）
+  if (all.length <= maxRuns) return all;
+  const sampled = [];
+  const used = new Set();
+  // 先均匀采样
+  const step = all.length / maxRuns;
+  for (let i = 0; i < maxRuns; i++) {
+    const idx = Math.floor(i * step);
+    if (!used.has(idx)) { sampled.push(all[idx]); used.add(idx); }
+  }
+  return sampled;
+}
+
+async function runOptimize() {
+  const btn = $('btnOpt');
+  btn.disabled = true; btn.textContent = '优化中...';
+  $('opt-status').textContent = '运行中...';
+  $('opt-status').style.color = 'var(--amber)';
+  $('optProgress').style.display = 'block';
+  $('optResult').style.display = 'none';
+
+  const days     = parseInt($('opt-days').value);
+  const maxRuns  = parseInt($('opt-runs').value);
+  const minTrades= parseInt($('opt-min-trades').value) || 3;
+
+  // 获取当前监控币种
+  let symbols = [];
+  try {
+    const s = await api('/api/status');
+    symbols = (s.symbols || []).slice(0, 8);  // 最多8个，避免太慢
+  } catch(e) {}
+  if (!symbols.length) {
+    alert('请先启动策略并等待自动扫描，或手动添加监控币种');
+    btn.disabled = false; btn.textContent = '▶ 开始优化';
+    $('optProgress').style.display = 'none';
+    return;
+  }
+
+  // 构建参数网格
+  const grid = buildParamGrid(maxRuns);
+  if (!grid.length) {
+    alert('参数范围设置有问题，没有生成有效组合（检查档位是否递增、止盈是否大于止损）');
+    btn.disabled = false; btn.textContent = '▶ 开始优化';
+    $('optProgress').style.display = 'none';
+    return;
+  }
+
+  $('opt-status').textContent = `共 ${grid.length} 组 × ${symbols.length} 币种`;
+  $('optProgressSub').textContent = `币种: ${symbols.join(', ')}`;
+
+  // 拉取所有币种K线（只拉一次，复用）
+  const endMs = Date.now(), startMs = endMs - days * 86400000;
+  $('optProgressLabel').textContent = `拉取 ${symbols.length} 个币种K线...`;
+  $('optFill').style.width = '0%';
+
+  const allCandles = {};
+  for (let i = 0; i < symbols.length; i++) {
+    const sym = symbols[i];
+    $('optProgressLabel').textContent = `拉取K线 ${sym} (${i+1}/${symbols.length})`;
+    $('optFill').style.width = (i / symbols.length * 20) + '%';
+    try {
+      allCandles[sym] = await fetchKlines(sym, startMs, endMs);
+    } catch(e) {
+      allCandles[sym] = [];
+    }
+    await sleep(150);
+  }
+
+  // 遍历参数组合
+  const results = [];
+  const totalSteps = grid.length;
+
+  for (let gi = 0; gi < grid.length; gi++) {
+    const p = grid[gi];
+
+    // 进度更新（每10组更新一次UI，避免频繁重绘）
+    if (gi % 10 === 0) {
+      const pct = 20 + (gi / totalSteps * 78);
+      $('optFill').style.width = pct.toFixed(1) + '%';
+      $('optProgressLabel').textContent =
+        `优化中 ${gi+1}/${totalSteps} — 当前最优: ${
+          results.length ? (results[0].pnl_usdt >= 0 ? '+' : '') +
+          results[0].pnl_usdt.toFixed(2) + 'U' : '--'
+        }`;
+      await sleep(0);  // 让UI有机会更新
+    }
+
+    // 构造cfg
+    const cfg = {
+      stop_loss_pct:       p.sl,
+      min_candle_drop_pct: p.drop,
+      take_profit_pct:     p.tp,
+      ws_max_hold_seconds: p.sec,
+      order_pct_1: p.p1, order_pct_2: p.p2, order_pct_3: p.p3,
+      order_ratio_1: 0.4, order_ratio_2: 0.35, order_ratio_3: 0.25,
+      position_size_usdt: 100,
+      cooldown_candles: 2,
+      trailing_red_min_pct: 1.0,
+      high_price_ratio: 0.80,
+    };
+
+    // 跑所有币种
+    let totalPnl = 0, totalTrades = 0, wins = 0;
+    for (const sym of symbols) {
+      const candles = allCandles[sym];
+      if (!candles || !candles.length) continue;
+      const {trades} = runBtStrategy(sym, candles, cfg);
+      totalPnl    += trades.reduce((s,t) => s + t.pnl_usdt, 0);
+      totalTrades += trades.length;
+      wins        += trades.filter(t => t.pnl_pct > 0).length;
+    }
+
+    if (totalTrades < minTrades) continue;  // 样本太少跳过
+
+    results.push({
+      ...p,
+      pnl_usdt:   Math.round(totalPnl * 100) / 100,
+      trade_cnt:  totalTrades,
+      win_rate:   totalTrades ? Math.round(wins / totalTrades * 1000) / 10 : 0,
+    });
+  }
+
+  // 按总盈亏排序
+  results.sort((a, b) => b.pnl_usdt - a.pnl_usdt);
+
+  $('optFill').style.width = '100%';
+  $('optProgressLabel').textContent = `完成！共 ${results.length} 个有效组合`;
+
+  // 渲染TOP5
+  const top5 = results.slice(0, 5);
+  $('optTableBody').innerHTML = top5.map((r, i) => `
+    <tr>
+      <td style="font-weight:600;color:${i===0?'var(--green)':'var(--text)'}">#${i+1}</td>
+      <td class="${r.pnl_usdt>=0?'pos':'neg'}" style="font-weight:600">
+        ${r.pnl_usdt>=0?'+':''}${r.pnl_usdt}
+      </td>
+      <td class="${r.win_rate>=50?'pos':'neg'}">${r.win_rate}%</td>
+      <td class="neu">${r.trade_cnt}</td>
+      <td class="neu">${r.sl}%</td>
+      <td class="neu">${r.tp}%</td>
+      <td class="neu">${r.sec}s</td>
+      <td class="neu">${r.p1}%</td>
+      <td class="neu">${r.p2}%</td>
+      <td class="neu">${r.p3}%</td>
+      <td class="neu">${r.drop||0}%</td>
+      <td>
+        <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px"
+          onclick="applyOptParams(${i},'${JSON.stringify(r).replace(/'/g,'&apos;')}')">
+          应用
+        </button>
+      </td>
+    </tr>`).join('');
+
+  $('optResult').style.display = 'block';
+  $('opt-status').textContent = `完成 最优盈亏: ${top5[0]?.pnl_usdt>=0?'+':''}${top5[0]?.pnl_usdt||0}U`;
+  $('opt-status').style.color = top5[0]?.pnl_usdt >= 0 ? 'var(--green)' : 'var(--red)';
+
+  btn.disabled = false; btn.textContent = '▶ 开始优化';
+}
+
+async function applyOptParams(rank, jsonStr) {
+  let r;
+  try { r = JSON.parse(jsonStr); } catch(e) { return; }
+
+  if (!confirm(
+    `应用第 ${rank+1} 名参数到策略配置？\n\n` +
+    `止损: ${r.sl}%  止盈: ${r.tp}%  持仓: ${r.sec}秒\n` +
+    `挂单档位: -${r.p1}% / -${r.p2}% / -${r.p3}%\n` +
+    `阴线最小跌幅: ${r.drop||0}%\n\n` +
+    `(将覆盖当前配置并保存到服务器)`
+  )) return;
+
+  // 先加载当前配置，只覆盖优化的字段
+  let cfg = {};
+  try { cfg = await api('/api/config'); } catch(e) {}
+
+  const newCfg = {
+    ...cfg,
+    stop_loss_pct:       r.sl,
+    ws_stop_loss_pct:    r.sl,
+    take_profit_pct:     r.tp,
+    ws_take_profit_pct:  r.tp,
+    ws_max_hold_seconds: r.sec,
+    order_pct_1: r.p1,
+    order_pct_2: r.p2,
+    order_pct_3: r.p3,
+    min_candle_drop_pct: r.drop || 0,
+  };
+
+  try {
+    await api('/api/config', 'POST', newCfg);
+    // 同步更新配置页UI
+    $('c-sl').value    = r.sl;
+    $('c-tp').value    = r.tp;
+    $('c-ws-sl').value = r.sl;
+    $('c-ws-tp').value = r.tp;
+    $('c-ws-sec').value= r.sec;
+    $('c-p1').value    = r.p1;
+    $('c-p2').value    = r.p2;
+    $('c-p3').value    = r.p3;
+    $('c-drop').value  = r.drop || 0;
+    alert(`✓ 第 ${rank+1} 名参数已应用并保存！`);
+  } catch(e) {
+    alert('保存失败: ' + e.message);
+  }
 }
 
 // ═══════════════════════════════════════════════════
