@@ -19,7 +19,7 @@ from store import (
     load_config, save_config, load_state, save_state,
     load_trades, append_trade, append_log, read_recent_logs,
 )
-from ws_monitor import PositionMonitorManager
+from ws_monitor import PositionMonitorManager, UserDataStreamMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,12 @@ class LiveEngine:
         self._mem_logs: list[dict] = read_recent_logs(200)
         # WebSocket秒级持仓监控
         self._ws_mgr = PositionMonitorManager()
+        # 用户数据流（实时感知买单成交，解决60秒轮询延迟）
+        self._uds = UserDataStreamMonitor(
+            client  = self.client,
+            on_fill = self._on_order_filled,
+            mode    = self.cfg.get("mode", "paper"),
+        )
 
     def _make_client(self) -> Optional[BinanceClient]:
         key    = self.cfg.get("api_key", "")
@@ -102,12 +108,20 @@ class LiveEngine:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._main_loop, daemon=True)
         self._thread.start()
+        # 启动用户数据流（实时感知成交）
+        self._uds = UserDataStreamMonitor(
+            client  = self.client,
+            on_fill = self._on_order_filled,
+            mode    = self.cfg.get("mode", "paper"),
+        )
+        self._uds.start()
         self._log("SYS", f"策略启动 模式={self.cfg.get('mode','paper')}")
         return {"ok": True}
 
     def stop(self) -> dict:
         self._stop_event.set()
         self._ws_mgr.stop_all()
+        self._uds.stop()
         with self._lock:
             self.state["running"] = False
             save_state(self.state)
@@ -427,10 +441,18 @@ class LiveEngine:
     # ── 挂单条件 ─────────────────────────────────────
 
     def _should_place_orders(self, candle: dict) -> bool:
-        if candle["close"] >= candle["open"]:
+        open_p  = candle["open"]
+        close_p = candle["close"]
+        # 条件1：阴线
+        if close_p >= open_p:
             return False
+        # 条件2：阴线跌幅 >= min_candle_drop_pct
+        drop_pct = (open_p - close_p) / open_p * 100
+        if drop_pct < self.cfg.get("min_candle_drop_pct", 0):
+            return False
+        # 条件3：高位保护
         dh = candle.get("day_high", 0)
-        if dh > 0 and candle["close"] < dh * self.cfg["high_price_ratio"]:
+        if dh > 0 and close_p < dh * self.cfg["high_price_ratio"]:
             return False
         return True
 
@@ -501,6 +523,9 @@ class LiveEngine:
             with self._lock:
                 self.state["orders"][symbol] = new_orders
                 save_state(self.state)
+            # 注册到用户数据流，等待实时成交推送（live模式）
+            if mode == "live":
+                self._uds.add_pending(symbol)
 
     # ── 成交检测 ─────────────────────────────────────
 
@@ -534,7 +559,14 @@ class LiveEngine:
 
     # ── 开仓 ─────────────────────────────────────────
 
-    def _open_position(self, symbol: str, filled: list, candle: dict, mode: str):
+    def _open_position(self, symbol: str, filled: list, candle: dict, mode: str,
+                       real_entry_ts: float = 0):
+        # 防止重复开仓（UDS和主循环可能同时检测到成交）
+        with self._lock:
+            if symbol in self.state["positions"]:
+                self._log(symbol, "已有持仓，跳过重复开仓")
+                return
+
         tc  = sum(o["fill_price"] * o["qty"] for o in filled)
         tq  = sum(o["qty"] for o in filled)
         avg = tc / tq
@@ -553,20 +585,66 @@ class LiveEngine:
         self._log(symbol,
             f"入场 {len(filled)}档成交 均价={avg:.6f} "
             f"WS止损={self.cfg.get('ws_stop_loss_pct',1.5)}% "
-            f"WS止盈={self.cfg.get('ws_take_profit_pct',2.5)}% "
-            f"超时={self.cfg.get('ws_max_hold_seconds',5)}秒")
+            f"第{self.cfg.get('ws_first_check_seconds',3)}秒盈利检查 "
+            f"第{self.cfg.get('ws_force_exit_seconds',6)}秒强制出场")
 
         # 启动 WebSocket 秒级监控
         self._ws_mgr.start_monitor(
-            symbol       = symbol,
-            entry_price  = avg,
-            qty          = round(tq, 6),
-            entry_time   = candle["close_time"],
-            cfg          = self.cfg,
-            on_exit      = self._ws_on_exit,
-            mode         = mode,
-            rest_price_fn= self._get_current_price,
+            symbol        = symbol,
+            entry_price   = avg,
+            qty           = round(tq, 6),
+            entry_time    = candle["close_time"],
+            cfg           = self.cfg,
+            on_exit       = self._ws_on_exit,
+            mode          = mode,
+            rest_price_fn = self._get_current_price,
+            real_entry_ts = real_entry_ts,
         )
+
+    # ── UserDataStream 成交回调（实时，不等主循环） ────
+
+    def _on_order_filled(self, symbol: str, avg_price: float,
+                         total_qty: float, transact_time_ms: int):
+        """
+        UserDataStream 检测到买单成交时的回调。
+        在独立线程中执行，立即开仓并启动秒级监控。
+        """
+        mode = self.cfg.get("mode", "paper")
+
+        # 检查是否已有持仓（避免重复开仓：主循环可能也检测到了）
+        with self._lock:
+            if symbol in self.state["positions"]:
+                self._log(symbol, "UDS成交推送但已有持仓，跳过")
+                return
+
+        # 计算实际成交时间戳（秒）
+        real_entry_ts = transact_time_ms / 1000.0 if transact_time_ms > 0 else time.time()
+        entry_time_str = datetime.fromtimestamp(
+            real_entry_ts, tz=timezone.utc
+        ).strftime("%H:%M:%S")
+
+        self._log(symbol,
+            f"UDS实时检测到成交 均价={avg_price:.6f} 量={total_qty:.6f} "
+            f"成交时间={entry_time_str}")
+
+        # 构造 filled 列表（兼容 _open_position 接口）
+        filled = [{"fill_price": avg_price, "qty": total_qty}]
+
+        # 构造最小 candle（仅用于 entry_time）
+        candle = {"close_time": entry_time_str}
+
+        # 开仓 + 启动秒级监控（传入实际成交时间）
+        self._open_position(symbol, filled, candle, mode,
+                            real_entry_ts=real_entry_ts)
+
+        # 标记挂单为已成交，避免主循环重复处理
+        with self._lock:
+            orders = self.state["orders"].get(symbol, [])
+            for o in orders:
+                if o["status"] == "pending":
+                    o["status"] = "filled"
+                    o["fill_price"] = avg_price
+            save_state(self.state)
 
     # ── 出场判断 ─────────────────────────────────────
 
@@ -780,6 +858,9 @@ class LiveEngine:
                 cancelled  += 1
         if cancelled:
             self._log(symbol, f"撤单 {cancelled}档未成交")
+            # 从用户数据流移除 pending
+            if mode == "live":
+                self._uds.remove_pending(symbol)
 
     # ── 日志 ─────────────────────────────────────────
 
