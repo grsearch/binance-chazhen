@@ -488,9 +488,6 @@ header{
     <div class="card-title">卖出参数</div>
     <div class="cfg-grid" style="margin-bottom:22px">
       <div class="field"><label>止损 (%)</label><input id="c-sl" value="3"></div>
-      <div class="field"><label>快速止盈 (%)</label><input id="c-tp" value="5"></div>
-      <div class="field"><label>最大持仓K线数</label><input id="c-hold" value="10"></div>
-      <div class="field"><label>阴线跟踪最小跌幅%</label><input id="c-trail" value="1.0"></div>
     </div>
 
     <div class="card-title">资金管理</div>
@@ -1034,9 +1031,6 @@ async function loadConfig() {
     $('c-r2').value    = cfg.order_ratio_2        ?? 0.35;
     $('c-r3').value    = cfg.order_ratio_3        ?? 0.25;
     $('c-sl').value    = cfg.stop_loss_pct        ?? 3;
-    $('c-tp').value    = cfg.take_profit_pct      ?? 5;
-    $('c-hold').value  = cfg.max_hold_candles     ?? 10;
-    $('c-trail').value = cfg.trailing_red_min_pct ?? 1.0;
     $('c-size').value  = cfg.position_size_usdt   ?? 100;
     $('c-cool').value  = cfg.cooldown_candles     ?? 2;
     $('c-maxpos').value= cfg.max_open_positions   ?? 3;
@@ -1062,9 +1056,6 @@ async function saveCfg() {
     order_ratio_2:        parseFloat($('c-r2').value),
     order_ratio_3:        parseFloat($('c-r3').value),
     stop_loss_pct:        parseFloat($('c-sl').value),
-    take_profit_pct:      parseFloat($('c-tp').value),
-    max_hold_candles:     parseInt($('c-hold').value),
-    trailing_red_min_pct: parseFloat($('c-trail').value),
     position_size_usdt:   parseFloat($('c-size').value),
     cooldown_candles:     parseInt($('c-cool').value),
     max_open_positions:   parseInt($('c-maxpos').value),
