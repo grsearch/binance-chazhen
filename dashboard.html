@@ -264,7 +264,7 @@ header{
             <th>入场时间</th><th>币种</th><th>模式</th>
             <th>入场价</th><th>出场价</th>
             <th>盈亏%</th><th>盈亏USDT</th>
-            <th>持仓K线</th><th>出场原因</th>
+            <th>持仓时间</th><th>出场原因</th>
           </tr>
         </thead>
         <tbody id="tradeBody">
@@ -307,7 +307,7 @@ header{
     <div class="metric" style="--ac:var(--green)"><div class="metric-label">总盈亏 (USDT)</div><div class="metric-value" id="bt-pnl">--</div></div>
     <div class="metric" style="--ac:var(--blue)"><div class="metric-label">胜率</div><div class="metric-value" id="bt-wr">--%</div></div>
     <div class="metric" style="--ac:var(--amber)"><div class="metric-label">总交易</div><div class="metric-value" id="bt-cnt">--</div></div>
-    <div class="metric" style="--ac:var(--purple)"><div class="metric-label">平均持仓(根)</div><div class="metric-value" id="bt-hold">--</div></div>
+    <div class="metric" style="--ac:var(--purple)"><div class="metric-label">平均持仓(秒)</div><div class="metric-value" id="bt-hold">--</div></div>
   </div>
 
   <div class="g2" id="btCharts" style="display:none">
@@ -323,7 +323,7 @@ header{
     <div class="card-title">回测交易明细</div>
     <div style="overflow-x:auto;max-height:360px;overflow-y:auto">
       <table class="tbl">
-        <thead><tr><th>入场时间</th><th>币种</th><th>入场价</th><th>出场价</th><th>盈亏%</th><th>盈亏USDT</th><th>持仓K线</th><th>出场原因</th></tr></thead>
+        <thead><tr><th>入场时间</th><th>币种</th><th>入场价</th><th>出场价</th><th>盈亏%</th><th>盈亏USDT</th><th>持仓时间</th><th>出场原因</th></tr></thead>
         <tbody id="btTradeBody"></tbody>
       </table>
     </div>
@@ -373,22 +373,22 @@ header{
           <input id="opt-sl-step" value="1" style="width:50px">
         </div>
       </div>
-      <div class="field"><label>止盈% 范围</label>
+      <div class="field"><label>盈利检查秒 范围</label>
         <div style="display:flex;gap:6px;align-items:center">
-          <input id="opt-tp-min" value="1.5" style="width:60px">
+          <input id="opt-chk-min" value="2" style="width:60px">
           <span style="color:var(--muted)">~</span>
-          <input id="opt-tp-max" value="5" style="width:60px">
+          <input id="opt-chk-max" value="5" style="width:60px">
           <span style="color:var(--muted)">步长</span>
-          <input id="opt-tp-step" value="0.5" style="width:50px">
+          <input id="opt-chk-step" value="1" style="width:50px">
         </div>
       </div>
-      <div class="field"><label>持仓秒数 范围</label>
+      <div class="field"><label>强制出场秒 范围</label>
         <div style="display:flex;gap:6px;align-items:center">
-          <input id="opt-sec-min" value="3" style="width:60px">
+          <input id="opt-frc-min" value="4" style="width:60px">
           <span style="color:var(--muted)">~</span>
-          <input id="opt-sec-max" value="15" style="width:60px">
+          <input id="opt-frc-max" value="10" style="width:60px">
           <span style="color:var(--muted)">步长</span>
-          <input id="opt-sec-step" value="3" style="width:50px">
+          <input id="opt-frc-step" value="2" style="width:50px">
         </div>
       </div>
       <div class="field"><label>第1档跌幅% 范围</label>
@@ -449,7 +449,7 @@ header{
           <thead>
             <tr>
               <th>#</th><th>总盈亏</th><th>胜率</th><th>交易数</th>
-              <th>止损%</th><th>止盈%</th><th>持仓秒</th>
+              <th>止损%</th><th>检查秒</th><th>出场秒</th>
               <th>档1%</th><th>档2%</th><th>档3%</th><th>阴线跌幅≥</th>
               <th>操作</th>
             </tr>
@@ -502,12 +502,14 @@ header{
 
     <div class="card-title">秒级出场参数（WebSocket 实时监控）</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6">
-      买入成交后立即启动 WebSocket 订阅实时价格，按秒触发出场，不等1分钟K线收盘。
+      买入成交后立即启动 WebSocket 订阅实时价格。第N秒检查盈利→有利润就卖；第M秒不论盈亏强制清仓。
     </div>
     <div class="cfg-grid" style="margin-bottom:20px">
       <div class="field"><label>WS 止损 (%)</label><input id="c-ws-sl" value="1.5"></div>
-      <div class="field"><label>WS 止盈 (%)</label><input id="c-ws-tp" value="2.5"></div>
-      <div class="field"><label>最大持仓秒数</label><input id="c-ws-sec" value="5"></div>
+      <div class="field"><label>盈利检查秒</label><input id="c-ws-chk" value="3"
+        title="第N秒：有利润就卖，没利润继续持有"></div>
+      <div class="field"><label>强制出场秒</label><input id="c-ws-frc" value="6"
+        title="第M秒：不论盈亏，强制市价清仓"></div>
     </div>
 
     <div class="card-title">实盘设置</div>
@@ -787,7 +789,7 @@ function renderTradeTable(trades) {
       <td>${fmtP(t.exit_price||0)}</td>
       <td class="${(t.pnl_pct||0)>=0?'pos':'neg'}">${(t.pnl_pct>=0?'+':'')+fmt(t.pnl_pct||0)}%</td>
       <td class="${(t.pnl_usdt||0)>=0?'pos':'neg'}">${(t.pnl_usdt>=0?'+':'')+fmt(t.pnl_usdt||0)}</td>
-      <td class="neu">${t.hold_candles||0}</td>
+      <td class="neu">${t.hold_seconds!=null ? t.hold_seconds+'s' : (t.hold_candles||0)+'K'}</td>
       <td class="neu">${t.exit_reason||'--'}</td>
     </tr>`).join('');
 }
@@ -840,51 +842,86 @@ async function fetchKlines(symbol, startMs, endMs) {
 function runBtStrategy(symbol, candles, cfg) {
   const trades=[]; let pos=null, ords=[], cd=0;
   const equity=[(cfg.position_size_usdt||100)*10];
-  for (const c of candles) {
-    if (ords.length&&!pos) {
-      const filled=ords.filter(o=>c.low<=o.price);
+  const firstSec = cfg.ws_first_check_seconds || 3;
+  const forceSec = cfg.ws_force_exit_seconds  || 6;
+  const slPct    = cfg.stop_loss_pct || 3;
+
+  for (let ci = 0; ci < candles.length; ci++) {
+    const c = candles[ci];
+
+    // 检查挂单是否成交
+    if (ords.length && !pos) {
+      const filled = ords.filter(o => c.low <= o.price);
       if (filled.length) {
-        const tc=filled.reduce((s,o)=>s+o.price*o.qty,0);
-        const tq=filled.reduce((s,o)=>s+o.qty,0);
-        pos={entry:tc/tq,qty:tq,sl:(tc/tq)*(1-(cfg.stop_loss_pct||3)/100),peak:tc/tq,had_green:false,hold:0};
+        const tc = filled.reduce((s,o) => s + o.price * o.qty, 0);
+        const tq = filled.reduce((s,o) => s + o.qty, 0);
+        const entry = tc / tq;
+        pos = {
+          entry, qty: tq,
+          sl: entry * (1 - slPct / 100),
+          entry_ci: ci,           // 入场K线索引
+          entry_time: c.close_time,
+        };
       }
-      ords=[];
+      ords = [];
     }
+
+    // 持仓中 → 秒级出场模拟
     if (pos) {
-      pos.hold++;
-      if (c.high>pos.peak) pos.peak=c.high;
-      let exit=null;
-      if (c.low<=pos.sl) exit={price:pos.sl,reason:'止损'};
-      else if (pos.hold>=(cfg.max_hold_candles||10)) exit={price:c.close,reason:'超时出局'};
-      else if ((c.high-pos.entry)/pos.entry*100>=(cfg.take_profit_pct||5)) {
-        pos.sl=pos.entry;
-        if (c.close>=pos.entry*(1+(cfg.take_profit_pct||5)/100))
-          exit={price:c.close,reason:`止盈${cfg.take_profit_pct||5}%`};
+      const holdCandles = ci - pos.entry_ci;  // 已持有的K线数
+      const holdSeconds = holdCandles * 60;    // 近似秒数（1m K线）
+
+      // 在当前K线内模拟秒级价格变化
+      // 用 open→high→low→close 的简化路径估算
+      let exit = null;
+
+      // 止损检查（任何时刻）
+      if (c.low <= pos.sl) {
+        exit = {price: pos.sl, reason: '止损'};
       }
-      if (!exit) {
-        if (c.close>pos.entry){pos.had_green=true;pos.sl=Math.max(pos.sl,pos.entry);}
-        if (pos.had_green&&c.close<c.open&&(c.open-c.close)/c.open*100>=(cfg.trailing_red_min_pct||1))
-          exit={price:c.close,reason:'回弹后阴线'};
+
+      // 第一次检查秒（holdSeconds 刚过 firstSec 的那根K线）
+      if (!exit && holdSeconds >= firstSec && holdSeconds < firstSec + 60) {
+        // 这根K线内到达 firstSec 检查点
+        // 用K线中间价估算当时价格
+        const midPrice = (c.open + c.close) / 2;
+        if (midPrice > pos.entry) {
+          // 有利润 → 卖出（用中间价模拟）
+          exit = {price: midPrice, reason: `第${firstSec}秒止盈`};
+        }
       }
+
+      // 强制出场秒（holdSeconds 刚过 forceSec 的那根K线）
+      if (!exit && holdSeconds >= forceSec) {
+        const midPrice = (c.open + c.close) / 2;
+        exit = {price: midPrice, reason: `第${forceSec}秒强制出场`};
+      }
+
       if (exit) {
-        const pp=(exit.price-pos.entry)/pos.entry*100;
-        const pu=(exit.price-pos.entry)*pos.qty;
-        trades.push({symbol,entry_price:pos.entry,exit_price:exit.price,
-          entry_time:c.close_time,exit_reason:exit.reason,hold_candles:pos.hold,pnl_pct:pp,pnl_usdt:pu});
-        equity.push(equity[equity.length-1]+pu);
-        cd=cfg.cooldown_candles||2; pos=null;
+        const pp = (exit.price - pos.entry) / pos.entry * 100;
+        const pu = (exit.price - pos.entry) * pos.qty;
+        trades.push({symbol, entry_price: pos.entry, exit_price: exit.price,
+          entry_time: pos.entry_time, exit_reason: exit.reason,
+          hold_candles: holdCandles, hold_seconds: holdSeconds,
+          pnl_pct: pp, pnl_usdt: pu});
+        equity.push(equity[equity.length-1] + pu);
+        cd = cfg.cooldown_candles || 2;
+        pos = null;
       }
       continue;
     }
-    if (cd>0){cd--;continue;}
-    const _drop=(c.open-c.close)/c.open*100;
-    if (c.close<c.open && _drop>=(cfg.min_candle_drop_pct||0))
-      ords=([cfg.order_pct_1||4,cfg.order_pct_2||6,cfg.order_pct_3||9]).map((pct,i)=>({
-        price:c.close*(1-pct/100),
-        qty:((cfg.position_size_usdt||100)*[cfg.order_ratio_1||.4,cfg.order_ratio_2||.35,cfg.order_ratio_3||.25][i])/(c.close*(1-pct/100)),
+
+    if (cd > 0) { cd--; continue; }
+
+    // 评估挂单
+    const _drop = (c.open - c.close) / c.open * 100;
+    if (c.close < c.open && _drop >= (cfg.min_candle_drop_pct || 0))
+      ords = ([cfg.order_pct_1||4, cfg.order_pct_2||6, cfg.order_pct_3||9]).map((pct,i) => ({
+        price: c.close * (1 - pct/100),
+        qty: ((cfg.position_size_usdt||100) * [cfg.order_ratio_1||.4, cfg.order_ratio_2||.35, cfg.order_ratio_3||.25][i]) / (c.close*(1-pct/100)),
       }));
   }
-  return {trades,equity};
+  return {trades, equity};
 }
 
 async function runBacktest() {
@@ -932,7 +969,7 @@ async function runBacktest() {
   const closed=allTrades;
   const wins=closed.filter(t=>t.pnl_pct>0);
   const totalPnl=closed.reduce((s,t)=>s+t.pnl_usdt,0);
-  const avgHold=closed.length?closed.reduce((s,t)=>s+t.hold_candles,0)/closed.length:0;
+  const avgHold=closed.length?closed.reduce((s,t)=>s+(t.hold_seconds!=null?t.hold_seconds:t.hold_candles*60),0)/closed.length:0;
 
   $('bt-pnl').textContent=(totalPnl>=0?'+':'')+fmt(totalPnl);
   $('bt-pnl').className='metric-value '+(totalPnl>=0?'pos':'neg');
@@ -973,7 +1010,7 @@ async function runBacktest() {
       <td>${fmtP(t.entry_price)}</td><td>${fmtP(t.exit_price||0)}</td>
       <td class="${t.pnl_pct>=0?'pos':'neg'}">${t.pnl_pct>=0?'+':''}${fmt(t.pnl_pct)}%</td>
       <td class="${t.pnl_usdt>=0?'pos':'neg'}">${t.pnl_usdt>=0?'+':''}${fmt(t.pnl_usdt)}</td>
-      <td class="neu">${t.hold_candles}</td>
+      <td class="neu">${t.hold_seconds!=null ? t.hold_seconds+'s' : (t.hold_candles||0)+'K'}</td>
       <td class="neu">${t.exit_reason}</td>
     </tr>`).join('');
 
@@ -1003,9 +1040,9 @@ async function loadConfig() {
     $('c-size').value  = cfg.position_size_usdt   ?? 100;
     $('c-cool').value  = cfg.cooldown_candles     ?? 2;
     $('c-maxpos').value= cfg.max_open_positions   ?? 3;
-    $('c-ws-sl').value = cfg.ws_stop_loss_pct    ?? 1.5;
-    $('c-ws-tp').value = cfg.ws_take_profit_pct  ?? 2.5;
-    $('c-ws-sec').value= cfg.ws_max_hold_seconds ?? 5;
+    $('c-ws-sl').value = cfg.ws_stop_loss_pct       ?? 1.5;
+    $('c-ws-chk').value= cfg.ws_first_check_seconds ?? 3;
+    $('c-ws-frc').value= cfg.ws_force_exit_seconds  ?? 6;
     $('c-mode').value  = cfg.mode                ?? 'paper';
     $('c-key').value   = cfg.api_key             ?? '';
     $('c-secret').value= cfg.api_secret          ?? '';
@@ -1031,9 +1068,9 @@ async function saveCfg() {
     position_size_usdt:   parseFloat($('c-size').value),
     cooldown_candles:     parseInt($('c-cool').value),
     max_open_positions:   parseInt($('c-maxpos').value),
-    ws_stop_loss_pct:     parseFloat($('c-ws-sl').value),
-    ws_take_profit_pct:   parseFloat($('c-ws-tp').value),
-    ws_max_hold_seconds:  parseInt($('c-ws-sec').value),
+    ws_stop_loss_pct:       parseFloat($('c-ws-sl').value),
+    ws_first_check_seconds: parseInt($('c-ws-chk').value),
+    ws_force_exit_seconds:  parseInt($('c-ws-frc').value),
     mode:                 $('c-mode').value,
     api_key:              $('c-key').value.trim(),
     api_secret:           $('c-secret').value.trim(),
@@ -1065,26 +1102,26 @@ function rangeArr(min, max, step) {
 function buildParamGrid(maxRuns) {
   const g = n => id => parseFloat($(id+'-'+n).value);
   const mn=g('min'), mx=g('max'), st=g('step');
-  const slArr  = rangeArr(mn('opt-sl'),  mx('opt-sl'),  st('opt-sl'));
-  const tpArr  = rangeArr(mn('opt-tp'),  mx('opt-tp'),  st('opt-tp'));
-  const secArr = rangeArr(mn('opt-sec'), mx('opt-sec'), st('opt-sec')).map(Math.round);
-  const p1Arr  = rangeArr(mn('opt-p1'),  mx('opt-p1'),  st('opt-p1'));
-  const p2Arr  = rangeArr(mn('opt-p2'),  mx('opt-p2'),  st('opt-p2'));
+  const slArr   = rangeArr(mn('opt-sl'),   mx('opt-sl'),   st('opt-sl'));
+  const chkArr  = rangeArr(mn('opt-chk'),  mx('opt-chk'),  st('opt-chk')).map(Math.round);
+  const frcArr  = rangeArr(mn('opt-frc'),  mx('opt-frc'),  st('opt-frc')).map(Math.round);
+  const p1Arr   = rangeArr(mn('opt-p1'),   mx('opt-p1'),   st('opt-p1'));
+  const p2Arr   = rangeArr(mn('opt-p2'),   mx('opt-p2'),   st('opt-p2'));
   const p3Arr   = rangeArr(mn('opt-p3'),   mx('opt-p3'),   st('opt-p3'));
   const dropArr = rangeArr(mn('opt-drop'), mx('opt-drop'), st('opt-drop'));
 
   // 全组合
   const all = [];
   for (const sl of slArr)
-  for (const tp of tpArr)
-  for (const sec of secArr)
+  for (const chk of chkArr)
+  for (const frc of frcArr)
   for (const p1 of p1Arr)
   for (const p2 of p2Arr)
   for (const p3 of p3Arr)
   for (const drop of dropArr) {
     if (p1 >= p2 || p2 >= p3) continue;  // 跌幅档位必须递增
-    if (tp <= sl) continue;              // 止盈必须大于止损
-    all.push({sl, tp, sec, p1, p2, p3, drop});
+    if (frc <= chk) continue;            // 强制出场秒必须 > 检查秒
+    all.push({sl, chk, frc, p1, p2, p3, drop});
   }
 
   // 超过上限时随机采样（保留多样性）
@@ -1128,7 +1165,7 @@ async function runOptimize() {
   // 构建参数网格
   const grid = buildParamGrid(maxRuns);
   if (!grid.length) {
-    alert('参数范围设置有问题，没有生成有效组合（检查档位是否递增、止盈是否大于止损）');
+    alert('参数范围设置有问题，没有生成有效组合（检查档位是否递增、强制出场秒是否大于检查秒）');
     btn.disabled = false; btn.textContent = '▶ 开始优化';
     $('optProgress').style.display = 'none';
     return;
@@ -1176,15 +1213,14 @@ async function runOptimize() {
 
     // 构造cfg
     const cfg = {
-      stop_loss_pct:       p.sl,
-      min_candle_drop_pct: p.drop,
-      take_profit_pct:     p.tp,
-      ws_max_hold_seconds: p.sec,
+      stop_loss_pct:            p.sl,
+      min_candle_drop_pct:      p.drop,
+      ws_first_check_seconds:   p.chk,
+      ws_force_exit_seconds:    p.frc,
       order_pct_1: p.p1, order_pct_2: p.p2, order_pct_3: p.p3,
       order_ratio_1: 0.4, order_ratio_2: 0.35, order_ratio_3: 0.25,
       position_size_usdt: 100,
       cooldown_candles: 2,
-      trailing_red_min_pct: 1.0,
       high_price_ratio: 0.80,
     };
 
@@ -1226,8 +1262,8 @@ async function runOptimize() {
       <td class="${r.win_rate>=50?'pos':'neg'}">${r.win_rate}%</td>
       <td class="neu">${r.trade_cnt}</td>
       <td class="neu">${r.sl}%</td>
-      <td class="neu">${r.tp}%</td>
-      <td class="neu">${r.sec}s</td>
+      <td class="neu">${r.chk}s</td>
+      <td class="neu">${r.frc}s</td>
       <td class="neu">${r.p1}%</td>
       <td class="neu">${r.p2}%</td>
       <td class="neu">${r.p3}%</td>
@@ -1253,7 +1289,7 @@ async function applyOptParams(rank, jsonStr) {
 
   if (!confirm(
     `应用第 ${rank+1} 名参数到策略配置？\n\n` +
-    `止损: ${r.sl}%  止盈: ${r.tp}%  持仓: ${r.sec}秒\n` +
+    `止损: ${r.sl}%  盈利检查: ${r.chk}秒  强制出场: ${r.frc}秒\n` +
     `挂单档位: -${r.p1}% / -${r.p2}% / -${r.p3}%\n` +
     `阴线最小跌幅: ${r.drop||0}%\n\n` +
     `(将覆盖当前配置并保存到服务器)`
@@ -1265,11 +1301,10 @@ async function applyOptParams(rank, jsonStr) {
 
   const newCfg = {
     ...cfg,
-    stop_loss_pct:       r.sl,
-    ws_stop_loss_pct:    r.sl,
-    take_profit_pct:     r.tp,
-    ws_take_profit_pct:  r.tp,
-    ws_max_hold_seconds: r.sec,
+    stop_loss_pct:           r.sl,
+    ws_stop_loss_pct:        r.sl,
+    ws_first_check_seconds:  r.chk,
+    ws_force_exit_seconds:   r.frc,
     order_pct_1: r.p1,
     order_pct_2: r.p2,
     order_pct_3: r.p3,
@@ -1279,15 +1314,14 @@ async function applyOptParams(rank, jsonStr) {
   try {
     await api('/api/config', 'POST', newCfg);
     // 同步更新配置页UI
-    $('c-sl').value    = r.sl;
-    $('c-tp').value    = r.tp;
-    $('c-ws-sl').value = r.sl;
-    $('c-ws-tp').value = r.tp;
-    $('c-ws-sec').value= r.sec;
-    $('c-p1').value    = r.p1;
-    $('c-p2').value    = r.p2;
-    $('c-p3').value    = r.p3;
-    $('c-drop').value  = r.drop || 0;
+    $('c-sl').value      = r.sl;
+    $('c-ws-sl').value   = r.sl;
+    $('c-ws-chk').value  = r.chk;
+    $('c-ws-frc').value  = r.frc;
+    $('c-p1').value      = r.p1;
+    $('c-p2').value      = r.p2;
+    $('c-p3').value      = r.p3;
+    $('c-drop').value    = r.drop || 0;
     alert(`✓ 第 ${rank+1} 名参数已应用并保存！`);
   } catch(e) {
     alert('保存失败: ' + e.message);
