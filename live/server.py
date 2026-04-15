@@ -120,9 +120,12 @@ def api_config_post():
             "order_pct_1","order_pct_2","order_pct_3",
             "order_ratio_1","order_ratio_2","order_ratio_3",
             "stop_loss_pct","take_profit_pct","trailing_red_min_pct",
-            "position_size_usdt",
+            "position_size_usdt","ws_stop_loss_pct",
         ]
-        int_fields = ["max_hold_candles","cooldown_candles","max_open_positions"]
+        int_fields = [
+            "max_hold_candles","cooldown_candles","max_open_positions",
+            "ws_first_check_seconds","ws_force_exit_seconds",
+        ]
         for f in float_fields:
             if f in data:
                 data[f] = float(data[f])
